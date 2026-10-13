@@ -7,12 +7,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/kloudkit/portico/internal/config"
+	"github.com/kloudkit/portico/internal/engine"
 	"github.com/kloudkit/portico/internal/proxy"
 	"github.com/kloudkit/portico/internal/routes"
 	"github.com/kloudkit/portico/internal/supervisor"
@@ -29,9 +31,6 @@ var upCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if cfg.Proxy.Engine != "builtin" {
-			return fmt.Errorf("proxy.engine: %s is not implemented yet", cfg.Proxy.Engine)
-		}
 
 		f := cmd.Flags()
 		ui.Raw, _ = f.GetBool("raw")
@@ -42,21 +41,32 @@ var upCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		ui.Pad(sup.Names())
 
 		addr := net.JoinHostPort(cfg.Proxy.Host, strconv.Itoa(cfg.Proxy.Port))
-		ln, err := net.Listen("tcp", addr)
+		listen := addr
+		if cfg.Proxy.Engine == "nginx" {
+			listen = "127.0.0.1:0"
+		}
+
+		ln, err := net.Listen("tcp", listen)
 		if err != nil {
 			return err
+		}
+
+		if cfg.Proxy.Engine == "nginx" {
+			if err := addNginx(cfg, rs, sup, addr, ln.Addr().(*net.TCPAddr).Port); err != nil {
+				return err
+			}
 		}
 
 		p := proxy.New(rs, cfg.Proxy.CORS, sup.Status)
 		srv := &http.Server{Handler: p, ReadHeaderTimeout: 10 * time.Second}
 
+		ui.Pad(sup.Names())
 		if !ui.Raw {
 			lipgloss.Println(ui.Routes(rs))
 		}
-		ui.Log("listening on %s", ui.Accent.Render("http://"+addr))
+		ui.Log("listening on %s %s", ui.Accent.Render("http://"+addr), ui.Faint.Render("("+cfg.Proxy.Engine+")"))
 
 		ctx, cancel := context.WithCancel(cmd.Context())
 		var g run.Group
@@ -98,6 +108,59 @@ var upCmd = &cobra.Command{
 
 		return err
 	},
+}
+
+// addNginx writes the nginx config and supervises nginx, locally or in a container.
+// The builtin proxy on fallback answers whatever nginx can't: no route, or a service that's down.
+func addNginx(cfg *config.Config, rs []routes.Route, sup *supervisor.Supervisor, addr string, fallback int) error {
+	dir := filepath.Join(cfg.Dir, ".portico", "nginx")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	n := engine.Nginx{Listen: addr, Fallback: fallback, CORS: cfg.Proxy.CORS, Routes: rs}
+	conf := filepath.Join(dir, "nginx.conf")
+
+	binary := engine.NginxBinary()
+	if binary != "" {
+		n.Temp = filepath.Join(dir, "tmp")
+	} else {
+		n.Temp = "/tmp"
+	}
+
+	rendered, err := n.Render()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(conf, []byte(rendered), 0o644); err != nil {
+		return err
+	}
+
+	if binary != "" {
+		if err := os.MkdirAll(n.Temp, 0o755); err != nil {
+			return err
+		}
+		sup.Add("nginx", cfg.Proxy.Port, []string{binary, "-e", "stderr", "-p", n.Temp, "-c", conf, "-g", "daemon off;"}, nil)
+		return nil
+	}
+
+	runtime, err := sup.Runtime(cfg)
+	if err != nil {
+		return fmt.Errorf("proxy.engine: nginx is not installed and %w", err)
+	}
+
+	name := "portico-" + sup.Project() + "-nginx"
+	sup.Add("nginx", cfg.Proxy.Port, []string{
+		runtime, "run", "--rm",
+		"--name", name,
+		"--label", supervisor.Label + "=" + sup.Project(),
+		"--network", "host",
+		"-v", conf + ":/etc/portico/nginx.conf:ro",
+		cfg.Proxy.Image + ":" + cfg.Proxy.Tag,
+		"nginx", "-c", "/etc/portico/nginx.conf", "-g", "daemon off;",
+	}, []string{runtime, "rm", "-f", name})
+
+	return nil
 }
 
 func init() {

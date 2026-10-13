@@ -27,7 +27,7 @@ import (
 const (
 	tailLines   = 20
 	stopTimeout = 5 * time.Second
-	label       = "portico.project"
+	Label       = "portico.project"
 )
 
 type Supervisor struct {
@@ -103,6 +103,36 @@ func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
 	}
 
 	return s, nil
+}
+
+// Add runs an extra command alongside the services, such as the proxy engine.
+func (s *Supervisor) Add(name string, port int, args []string, cleanup []string) {
+	s.units = append(s.units, &unit{
+		name:    name,
+		port:    port,
+		style:   ui.Color(len(s.units)),
+		cleanup: cleanup,
+		command: func(ctx context.Context) *exec.Cmd {
+			return exec.CommandContext(ctx, args[0], args[1:]...)
+		},
+	})
+}
+
+// Runtime is the container runtime, resolving it if no service needed one yet.
+func (s *Supervisor) Runtime(cfg *config.Config) (string, error) {
+	if s.runtime == "" {
+		runtime, err := cfg.RuntimeBinary()
+		if err != nil {
+			return "", err
+		}
+		s.runtime = runtime
+	}
+
+	return s.runtime, nil
+}
+
+func (s *Supervisor) Project() string {
+	return s.project
 }
 
 func (s *Supervisor) Names() []string {
@@ -267,7 +297,7 @@ func (s *Supervisor) container(name string, svc config.Service) (func(context.Co
 	return func(ctx context.Context) *exec.Cmd {
 		return exec.CommandContext(ctx, s.runtime, "run", "--rm",
 			"--name", container,
-			"--label", label+"="+s.project,
+			"--label", Label+"="+s.project,
 			"-p", fmt.Sprintf("127.0.0.1:%d:%d", svc.HostPort, svc.Port),
 			image,
 		)
@@ -290,7 +320,7 @@ func (s *Supervisor) compose(file, service string) (func(context.Context) *exec.
 }
 
 func (s *Supervisor) removeLeftovers() {
-	out, err := exec.Command(s.runtime, "ps", "-aq", "--filter", "label="+label+"="+s.project).Output()
+	out, err := exec.Command(s.runtime, "ps", "-aq", "--filter", "label="+Label+"="+s.project).Output()
 	if ids := strings.Fields(string(out)); err == nil && len(ids) > 0 {
 		exec.Command(s.runtime, append([]string{"rm", "-f"}, ids...)...).Run()
 		ui.Log("removed %d leftover container(s)", len(ids))

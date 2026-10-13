@@ -88,8 +88,9 @@ func Default() *Config {
 			Base:   "/",
 			Engine: "builtin",
 			Image:  "nginx",
-			Tag:    "stable-alpine",
-			CORS:   []string{"*"},
+			// renovate: datasource=docker depName=nginx
+			Tag:  "1.30.5-alpine",
+			CORS: []string{"*"},
 		},
 		Services: map[string]Service{},
 	}

@@ -32,7 +32,8 @@ the right service.
 ## Requirements
 
 - Linux.
-- Docker or Podman, only for `image` and `compose` services.
+- Docker or Podman, only for `image` and `compose` services, or the nginx
+  engine when nginx isn't installed.
 
 ## Installation
 
@@ -94,13 +95,15 @@ portico routes
 
 ### Proxy
 
-| Key      | Default   | Description                         |
-| -------- | --------- | ----------------------------------- |
-| `port`   | `4400`    | Port Portico listens on.            |
-| `host`   | `0.0.0.0` | Address Portico listens on.         |
-| `base`   | `/`       | Prefix mounted in front of routes.  |
-| `engine` | `builtin` | Proxy engine.                       |
-| `cors`   | `["*"]`   | Origins allowed to call Portico cross-origin. |
+| Key      | Default         | Description                                   |
+| -------- | --------------- | --------------------------------------------- |
+| `port`   | `4400`          | Port Portico listens on.                      |
+| `host`   | `0.0.0.0`       | Address Portico listens on.                   |
+| `base`   | `/`             | Prefix mounted in front of routes.            |
+| `engine` | `builtin`       | `builtin` or `nginx`.                         |
+| `image`  | `nginx`         | Image for the nginx engine.                   |
+| `tag`    | `1.30.5-alpine` | Tag for the nginx engine.                     |
+| `cors`   | `["*"]`         | Origins allowed to call Portico cross-origin. |
 
 ### Services
 
@@ -131,6 +134,16 @@ A service is one of:
 
 A compose service with several published ports is mounted at
 `<route>/<port>` for each one. With `service`, set `port` to pick one.
+
+### Engines
+
+The `builtin` engine is Portico itself and needs nothing else. Set
+`engine: nginx` to put nginx in front instead, for parity with an nginx-based
+production setup. Portico generates the nginx config from the same routes, so
+both engines forward the same paths and headers. nginx runs from your `PATH`
+if it's installed, otherwise in a container from `image:tag`. Requests nginx
+can't serve (no route, a service that's down) fall back to Portico, so the JSON
+errors are the same too.
 
 ### Output
 
@@ -183,5 +196,5 @@ portico up --port 8000 --route /=5173 --route /api=3200
 
 ## Status
 
-Portico is early. Next up are the nginx engine and the `status`, `logs`,
-`restart` and `down` commands.
+Portico is early. Next up are the `status`, `logs`, `restart` and `down`
+commands.
