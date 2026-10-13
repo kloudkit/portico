@@ -98,15 +98,12 @@ func (s *Supervisor) newUnit(cfg *config.Config, i int, name string) (*unit, err
 		style:  ui.Color(i),
 	}
 
+	u.port = cfg.ListenPort(name)
 	switch kind {
 	case config.KindRun:
-		if svc.Port != config.NoPort {
-			u.port = int(svc.Port)
-		}
-		u.command = s.shell(svc)
+		u.command = s.shell(svc, u.port)
 	case config.KindImage:
-		u.port = svc.HostPort
-		u.command, u.cleanup = s.container(name, svc)
+		u.command, u.cleanup = s.container(name, svc, u.port)
 	case config.KindCompose:
 		file := cfg.Path(svc.Compose)
 		s.files[name] = file

@@ -147,13 +147,12 @@ func (u *unit) rotate() {
 	u.log, u.logBytes = f, 0
 }
 
-func (s *Supervisor) shell(svc config.Service) func(context.Context) *exec.Cmd {
+func (s *Supervisor) shell(svc config.Service, port int) func(context.Context) *exec.Cmd {
 	command := svc.Run
 	env := []string{"PYTHONUNBUFFERED=1"}
-	if svc.Port != config.NoPort {
-		port := strconv.Itoa(int(svc.Port))
-		command = strings.ReplaceAll(command, "{port}", port)
-		env = append(env, "PORT="+port)
+	if port != 0 {
+		command = strings.ReplaceAll(command, "{port}", strconv.Itoa(port))
+		env = append(env, "PORT="+strconv.Itoa(port))
 	}
 
 	return func(ctx context.Context) *exec.Cmd {
@@ -167,7 +166,7 @@ func (s *Supervisor) shell(svc config.Service) func(context.Context) *exec.Cmd {
 	}
 }
 
-func (s *Supervisor) container(name string, svc config.Service) (func(context.Context) *exec.Cmd, []string) {
+func (s *Supervisor) container(name string, svc config.Service, hostPort int) (func(context.Context) *exec.Cmd, []string) {
 	image := svc.Image
 	if svc.Tag != "" {
 		image += ":" + svc.Tag
@@ -178,7 +177,7 @@ func (s *Supervisor) container(name string, svc config.Service) (func(context.Co
 		return exec.CommandContext(ctx, s.runtime, "run", "--rm",
 			"--name", container,
 			"--label", Label+"="+s.project,
-			"-p", fmt.Sprintf("127.0.0.1:%d:%d", svc.HostPort, svc.Port),
+			"-p", fmt.Sprintf("127.0.0.1:%d:%d", hostPort, svc.Port),
 			image,
 		)
 	}, []string{s.runtime, "rm", "-f", container}

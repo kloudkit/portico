@@ -125,19 +125,16 @@ func detect(dir string) []candidate {
 		break
 	}
 
-	dirs := []string{"."}
-	entries, _ := os.ReadDir(dir)
-	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "node_modules" {
-			dirs = append(dirs, e.Name())
-		}
-	}
-
 	// The likeliest frontend comes first, so it gets the / route.
 	frontends := []string{".", "web", "frontend", "client", "app", "ui"}
-	slices.SortStableFunc(dirs, func(a, b string) int {
-		return boolInt(!slices.Contains(frontends, a)) - boolInt(!slices.Contains(frontends, b))
-	})
+	var rest []string
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "node_modules" && !slices.Contains(frontends, e.Name()) {
+			rest = append(rest, e.Name())
+		}
+	}
+	dirs := append(frontends, rest...)
 
 	root := true
 	for _, sub := range dirs {
@@ -216,13 +213,6 @@ func devCommand(dir string) (string, bool) {
 	default:
 		return run + " " + flags, true
 	}
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func init() {

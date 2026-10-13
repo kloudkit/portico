@@ -33,6 +33,10 @@ type Config struct {
 	// File is the config file, if there is one; Dir is where relative paths resolve.
 	File string `yaml:"-"`
 	Dir  string `yaml:"-"`
+
+	// Assigned holds the free ports AssignFreePorts picked: the port of a run
+	// service without one, and the host port an image service is published on.
+	Assigned map[string]int `yaml:"-"`
 }
 
 type Proxy struct {
@@ -61,11 +65,6 @@ type Service struct {
 	Host    string            `yaml:"host"`
 	Quiet   bool              `yaml:"quiet"`
 	Log     *bool             `yaml:"log"`
-
-	// HostPort is where an image service's port is published.
-	HostPort int `yaml:"-"`
-	// AutoPort is set when Port was picked by AssignFreePorts.
-	AutoPort bool `yaml:"-"`
 }
 
 // Port is a port number, or "none" for a run service that serves nothing.
@@ -271,13 +270,19 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// AssignFreePorts gives run services without a port one for {port}, and
-// image services a host port to publish on.
+// AssignFreePorts picks a free port for every run service without one, and a
+// host port for every image service, unless one was already assigned.
 func (c *Config) AssignFreePorts() error {
+	if c.Assigned == nil {
+		c.Assigned = map[string]int{}
+	}
+
 	for _, name := range c.Names() {
 		s := c.Services[name]
-		kind := s.Kind()
-		if (kind != KindRun || s.Port != 0) && kind != KindImage {
+		if (s.Kind() != KindRun || s.Port != 0) && s.Kind() != KindImage {
+			continue
+		}
+		if _, done := c.Assigned[name]; done {
 			continue
 		}
 
@@ -285,35 +290,32 @@ func (c *Config) AssignFreePorts() error {
 		if err != nil {
 			return fmt.Errorf("services.%s: %w", name, err)
 		}
-
-		if kind == KindImage {
-			s.HostPort = port
-		} else {
-			s.Port, s.AutoPort = Port(port), true
-		}
-		c.Services[name] = s
+		c.Assigned[name] = port
 	}
 
 	return nil
 }
 
-// CarryPorts keeps the ports AssignFreePorts gave services that haven't changed
-// since prev, so a reload doesn't move them.
+// ListenPort is the local port portico routes a service to, or 0 for none.
+func (c *Config) ListenPort(name string) int {
+	s := c.Services[name]
+	if port, ok := c.Assigned[name]; ok {
+		return port
+	}
+	if s.Port == NoPort {
+		return 0
+	}
+
+	return int(s.Port)
+}
+
+// CarryPorts keeps the ports assigned to services that haven't changed since
+// prev, so a reload doesn't move them.
 func (c *Config) CarryPorts(prev *Config) {
-	for name, s := range c.Services {
-		old, ok := prev.Services[name]
-		if !ok {
-			continue
-		}
-
-		raw := old
-		if raw.AutoPort {
-			raw.Port = 0
-		}
-		raw.HostPort, raw.AutoPort = 0, false
-
-		if reflect.DeepEqual(raw, s) {
-			c.Services[name] = old
+	c.Assigned = map[string]int{}
+	for name, port := range prev.Assigned {
+		if reflect.DeepEqual(prev.Services[name], c.Services[name]) {
+			c.Assigned[name] = port
 		}
 	}
 }

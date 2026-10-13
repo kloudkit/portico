@@ -170,9 +170,14 @@ func (p *Proxy) Watch(ctx context.Context, interval time.Duration, check Check, 
 		check = func(r routes.Route) (bool, string) { return Probe(r.Port), "" }
 	}
 
+	var current *[]*target
 	seen := map[*target]bool{}
 	for {
-		for _, t := range *p.targets.Load() {
+		if targets := p.targets.Load(); targets != current {
+			current, seen = targets, map[*target]bool{}
+		}
+
+		for _, t := range *current {
 			ready, health := check(t.Route)
 			t.health.Store(health)
 			if t.ready.Swap(ready) != ready || !seen[t] {

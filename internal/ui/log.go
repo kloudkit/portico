@@ -14,8 +14,7 @@ var (
 	Raw        bool
 	Timestamps bool
 
-	// Sink, when set, receives every line instead of the terminal, e.g. for the TUI.
-	Sink func(name string, style lipgloss.Style, text string)
+	sink func(name string, style lipgloss.Style, text string)
 
 	mu      sync.Mutex
 	width   = len("portico")
@@ -33,13 +32,26 @@ func Color(i int) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(palette[i%len(palette)])
 }
 
+// SetSink sends every line to sink instead of the terminal, e.g. for the TUI; nil restores the terminal.
+func SetSink(s func(name string, style lipgloss.Style, text string)) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	sink = s
+}
+
+// Prefix is the padded, colored name in front of a service's lines.
+func Prefix(name string, style lipgloss.Style) string {
+	return style.Render(fmt.Sprintf("%-*s", width, name)) + Faint.Render(" │ ")
+}
+
 // Line prints one line of output under a name prefix.
 func Line(name string, style lipgloss.Style, text string) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if Sink != nil {
-		Sink(name, style, text)
+	if sink != nil {
+		sink(name, style, text)
 		return
 	}
 
@@ -48,7 +60,7 @@ func Line(name string, style lipgloss.Style, text string) {
 		return
 	}
 
-	prefix := style.Render(fmt.Sprintf("%-*s", width, name)) + Faint.Render(" │ ")
+	prefix := Prefix(name, style)
 	if Timestamps {
 		prefix = Faint.Render(time.Now().Format("15:04:05")) + " " + prefix
 	}
@@ -58,7 +70,7 @@ func Line(name string, style lipgloss.Style, text string) {
 
 // Log prints a message from portico itself; in raw mode it goes to stderr.
 func Log(format string, args ...any) {
-	if Raw && Sink == nil {
+	if Raw {
 		mu.Lock()
 		defer mu.Unlock()
 		fmt.Fprintf(os.Stderr, "portico: "+format+"\n", args...)

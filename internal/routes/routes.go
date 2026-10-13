@@ -48,13 +48,9 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 			})
 		}
 
-		switch s.Kind() {
-		case config.KindImage:
-			add(route, name, s.HostPort)
-			continue
-		case config.KindRun, config.KindAttached:
-			if s.Port != config.NoPort {
-				add(route, name, int(s.Port))
+		if s.Kind() != config.KindCompose {
+			if port := cfg.ListenPort(name); port != 0 {
+				add(route, name, port)
 			}
 			continue
 		}

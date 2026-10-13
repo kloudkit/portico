@@ -123,7 +123,7 @@ reserved. Most dev servers read `.env` themselves; for one that doesn't, use
 ```sh
 portico up                  # everything, output prefixed by service
 portico up web api          # only these
-portico up --tui            # live dashboard: ↑/↓ to pick a service, r to restart
+portico up --tui            # live dashboard: ↑/↓ pick a service, r restart, PgUp/PgDn scroll
 portico up --watch          # reload when portico.yaml changes, restarting only what changed
 ```
 
@@ -143,7 +143,8 @@ portico down                # stop everything, even after Portico was killed
 ## Behind the scenes
 
 - **Containers:** an image or compose service with a Docker `HEALTHCHECK` is
-  routed only once Docker reports it healthy.
+  routed only once Docker reports it healthy (builtin engine; nginx routes it
+  as soon as its port answers).
 - **nginx engine:** Portico writes the nginx config from the same routes and
   runs nginx from `PATH` or a container. What nginx can't serve falls back to
   Portico, so errors look the same.

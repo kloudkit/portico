@@ -63,10 +63,10 @@ func TestAssignFreePorts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.Services["web"].Port == 0 {
+	if cfg.ListenPort("web") == 0 {
 		t.Error("web did not get a port")
 	}
-	if cfg.Services["api"].Port != 3200 {
+	if cfg.ListenPort("api") != 3200 {
 		t.Error("api port was overwritten")
 	}
 }
@@ -188,8 +188,11 @@ func TestCarryPortsAndChanged(t *testing.T) {
 	next.CarryPorts(prev)
 	next.AssignFreePorts()
 
-	if next.Services["web"].Port != prev.Services["web"].Port {
+	if next.ListenPort("web") != prev.ListenPort("web") {
 		t.Error("unchanged web lost its port")
+	}
+	if next.ListenPort("api") == prev.ListenPort("api") {
+		t.Error("changed api kept its port")
 	}
 	if got := strings.Join(next.Changed(prev), ","); got != "api,new,gone" {
 		t.Errorf("changed: %s", got)

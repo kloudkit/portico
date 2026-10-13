@@ -7,7 +7,8 @@
 - 🧙 Write a starter `portico.yaml` with `portico init`, picking from the compose files and dev scripts it finds
 - 🖥️ Watch every service live with `portico up --tui`
 - 👀 Reload on `portico.yaml` changes with `portico up --watch`, restarting only the services that changed
-- 🩺 Hold back requests to containers until Docker's healthcheck reports them healthy
+- 🩺 Hold back requests to containers until Docker's healthcheck reports them healthy, on the builtin engine
+- 📜 Scroll back through the TUI's logs with PgUp, PgDn, `g` and `G`
 
 ### Changed
 
