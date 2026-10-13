@@ -1,4 +1,4 @@
-![Portico: many services, one front door, by KloudKIT](brand/portico-banner.svg)
+![Portico — many services, one front door by KloudKIT](brand/portico-banner.svg)
 
 # KloudKIT Portico
 
