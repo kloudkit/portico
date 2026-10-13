@@ -25,10 +25,19 @@ jobs:
         with:
           go-version: 1.27.x
 
+      - name: 📝 Extract release notes from CHANGELOG.md
+        run: |
+          awk -v version="${GITHUB_REF_NAME#v}" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && (/^## \[/ || /^\[[^]]+\]: /) { exit }
+            found { print }
+          ' CHANGELOG.md > "${{ runner.temp }}/notes.md"
+          test -s "${{ runner.temp }}/notes.md"
+
       - name: 📦 Release
         uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes ${{ runner.temp }}/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

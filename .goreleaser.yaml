@@ -22,3 +22,15 @@ checksum:
 
 changelog:
   disable: true
+
+release:
+  footer: |
+    ## Install
+
+    ```sh
+    mkdir -p ~/.local/bin
+    curl -fsSL -o ~/.local/bin/portico https://github.com/kloudkit/portico/releases/download/{{ .Tag }}/portico-amd64
+    chmod +x ~/.local/bin/portico
+    ```
+
+    Use `portico-arm64` on arm64.
