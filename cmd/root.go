@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/kloudkit/portico/internal/config"
 	"github.com/kloudkit/portico/internal/routes"
+	"github.com/kloudkit/portico/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,12 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	opts := []fang.Option{fang.WithVersion(version), fang.WithoutManpage(), fang.WithErrorHandler(printError)}
+	opts := []fang.Option{
+		fang.WithColorSchemeFunc(ui.FrappeColorScheme),
+		fang.WithVersion(version),
+		fang.WithoutManpage(),
+		fang.WithErrorHandler(printError),
+	}
 	if err := fang.Execute(context.Background(), rootCmd, opts...); err != nil {
 		os.Exit(1)
 	}

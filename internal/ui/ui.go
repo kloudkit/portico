@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	Accent = lipgloss.NewStyle().Foreground(lipgloss.Color("#8caaee")).Bold(true)
-	Faint  = lipgloss.NewStyle().Foreground(lipgloss.Color("#737994"))
-	Good   = lipgloss.NewStyle().Foreground(lipgloss.Color("#a6d189"))
-	Warn   = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5c890"))
-	Bad    = lipgloss.NewStyle().Foreground(lipgloss.Color("#e78284"))
+	Accent = lipgloss.NewStyle().Foreground(Blue).Bold(true)
+	Faint  = lipgloss.NewStyle().Foreground(Overlay0)
+	Good   = lipgloss.NewStyle().Foreground(Green)
+	Warn   = lipgloss.NewStyle().Foreground(Yellow)
+	Bad    = lipgloss.NewStyle().Foreground(Red)
 )
 
 func Log(format string, args ...any) {
