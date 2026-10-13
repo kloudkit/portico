@@ -2,6 +2,11 @@
 
 # KloudKIT • Portico
 
+[![Stars](https://img.shields.io/github/stars/kloudkit/portico?style=for-the-badge&logo=git&logoColor=c6d0f5&labelColor=414559&color=f0c6c6)](https://github.com/kloudkit/portico/stargazers)
+[![Release](https://img.shields.io/github/v/release/kloudkit/portico?style=for-the-badge&logo=github&logoColor=c6d0f5&label=release&labelColor=414559&color=ef9f76)](https://github.com/kloudkit/portico/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/kloudkit/portico/ci.yaml?style=for-the-badge&logo=githubactions&logoColor=c6d0f5&label=build&labelColor=414559&color=a6da95)](https://github.com/kloudkit/portico/actions/workflows/ci.yaml)
+[![License](https://img.shields.io/github/license/kloudkit/portico?style=for-the-badge&logo=opensourceinitiative&logoColor=c6d0f5&labelColor=414559&color=8caaee)](https://github.com/kloudkit/portico/blob/main/LICENSE)
+
 A web app in development is rarely one process: a frontend dev server, an API,
 maybe a config server and a websocket service, each on its own port. That works
 on a laptop. It breaks behind a gateway that gives every port its own origin
