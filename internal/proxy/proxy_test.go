@@ -178,3 +178,14 @@ func TestPreserveHost(t *testing.T) {
 		t.Errorf("host: got %v", body["host"])
 	}
 }
+
+func TestHealthGate(t *testing.T) {
+	p := New([]routes.Route{{Path: "/", Service: "web", Port: upstream(t)}}, nil, nil)
+
+	for health, want := range map[string]int{"starting": 503, "unhealthy": 503, "healthy": 200, "": 200} {
+		(*p.targets.Load())[0].health.Store(health)
+		if code, _ := get(t, p, "/"); code != want {
+			t.Errorf("%q: got %d, want %d", health, code, want)
+		}
+	}
+}

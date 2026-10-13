@@ -169,3 +169,29 @@ func TestSchemaCoversConfig(t *testing.T) {
 	check(reflect.TypeFor[Proxy](), schema.Properties.Proxy.Properties)
 	check(reflect.TypeFor[Service](), schema.Properties.Services.AdditionalProperties.Properties)
 }
+
+func TestCarryPortsAndChanged(t *testing.T) {
+	prev := Default()
+	prev.Services = map[string]Service{
+		"web":  {Run: "serve --port {port}"},
+		"api":  {Run: "api --port {port}"},
+		"gone": {Port: 3000},
+	}
+	prev.AssignFreePorts()
+
+	next := Default()
+	next.Services = map[string]Service{
+		"web": {Run: "serve --port {port}"},
+		"api": {Run: "api --verbose --port {port}"},
+		"new": {Port: 4000},
+	}
+	next.CarryPorts(prev)
+	next.AssignFreePorts()
+
+	if next.Services["web"].Port != prev.Services["web"].Port {
+		t.Error("unchanged web lost its port")
+	}
+	if got := strings.Join(next.Changed(prev), ","); got != "api,new,gone" {
+		t.Errorf("changed: %s", got)
+	}
+}

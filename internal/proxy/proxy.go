@@ -21,7 +21,7 @@ import (
 )
 
 type Proxy struct {
-	targets []*target
+	targets atomic.Pointer[[]*target]
 	cors    []string
 	status  StatusFunc
 	public  atomic.Pointer[string]
@@ -35,14 +35,25 @@ type StatusFunc func(name string) (supervisor.Status, bool)
 
 type target struct {
 	routes.Route
-	proxy *httputil.ReverseProxy
-	ready atomic.Bool
+	proxy  *httputil.ReverseProxy
+	ready  atomic.Bool
+	health atomic.Value
 }
+
+// Check reports whether a route's upstream is ready, and Docker's healthcheck status if it has one.
+type Check func(routes.Route) (ready bool, health string)
 
 // New builds the proxy. cors lists the origins it answers CORS for; "*" allows any.
 func New(rs []routes.Route, cors []string, status StatusFunc) *Proxy {
 	p := &Proxy{cors: cors, status: status}
+	p.SetRoutes(rs)
 
+	return p
+}
+
+// SetRoutes replaces the routes; requests in flight finish on the old ones.
+func (p *Proxy) SetRoutes(rs []routes.Route) {
+	var targets []*target
 	for _, r := range rs {
 		t := &target{Route: r}
 		upstream := &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", r.Port)}
@@ -107,12 +118,12 @@ func New(rs []routes.Route, cors []string, status StatusFunc) *Proxy {
 			},
 		}
 
-		p.targets = append(p.targets, t)
+		t.health.Store("")
+		targets = append(targets, t)
 	}
 
-	slices.SortFunc(p.targets, func(a, b *target) int { return len(b.Path) - len(a.Path) })
-
-	return p
+	slices.SortFunc(targets, func(a, b *target) int { return len(b.Path) - len(a.Path) })
+	p.targets.Store(&targets)
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,19 +152,32 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h := t.health.Load().(string); h == "starting" || h == "unhealthy" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "service_unavailable", "service": t.Service, "port": t.Port, "state": h})
+		return
+	}
+
 	t.proxy.ServeHTTP(w, r)
 }
 
-// Watch probes every upstream until ctx ends, reporting readiness changes.
-func (p *Proxy) Watch(ctx context.Context, interval time.Duration, changed func(routes.Route, bool)) {
+// Watch checks every upstream until ctx ends, reporting readiness changes.
+// A nil check only probes the port.
+func (p *Proxy) Watch(ctx context.Context, interval time.Duration, check Check, changed func(r routes.Route, ready bool, health string)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for first := true; ; first = false {
-		for _, t := range p.targets {
-			ready := probe(t.Port)
-			if t.ready.Swap(ready) != ready || first {
-				changed(t.Route, ready)
+	if check == nil {
+		check = func(r routes.Route) (bool, string) { return Probe(r.Port), "" }
+	}
+
+	seen := map[*target]bool{}
+	for {
+		for _, t := range *p.targets.Load() {
+			ready, health := check(t.Route)
+			t.health.Store(health)
+			if t.ready.Swap(ready) != ready || !seen[t] {
+				changed(t.Route, ready, health)
+				seen[t] = true
 			}
 		}
 
@@ -165,15 +189,15 @@ func (p *Proxy) Watch(ctx context.Context, interval time.Duration, changed func(
 	}
 }
 
-// Ready reports whether the upstream behind a route path answered its last probe.
-func (p *Proxy) Ready(path string) bool {
-	for _, t := range p.targets {
+// Ready reports whether the upstream behind a route path passed its last check, and its health.
+func (p *Proxy) Ready(path string) (bool, string) {
+	for _, t := range *p.targets.Load() {
 		if t.Path == path {
-			return t.ready.Load()
+			return t.ready.Load(), t.health.Load().(string)
 		}
 	}
 
-	return false
+	return false, ""
 }
 
 // URL is the public URL learned from the gateway in front, if any request came through one.
@@ -206,7 +230,7 @@ func (p *Proxy) allowed(origin string) bool {
 }
 
 func (p *Proxy) match(path string) *target {
-	for _, t := range p.targets {
+	for _, t := range *p.targets.Load() {
 		if t.Path == "/" || path == t.Path || strings.HasPrefix(path, t.Path+"/") {
 			return t
 		}
@@ -215,7 +239,8 @@ func (p *Proxy) match(path string) *target {
 	return nil
 }
 
-func probe(port int) bool {
+// Probe reports whether something accepts connections on a local port.
+func Probe(port int) bool {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 500*time.Millisecond)
 	if err != nil {
 		return false

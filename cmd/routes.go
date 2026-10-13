@@ -13,7 +13,7 @@ var routesCmd = &cobra.Command{
 	Short: "Print the resolved route table without starting anything",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		cfg, rs, err := load(cmd)
+		cfg, rs, err := load(cmd, nil)
 		if err != nil {
 			return err
 		}

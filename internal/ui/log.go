@@ -14,6 +14,9 @@ var (
 	Raw        bool
 	Timestamps bool
 
+	// Sink, when set, receives every line instead of the terminal, e.g. for the TUI.
+	Sink func(name string, style lipgloss.Style, text string)
+
 	mu      sync.Mutex
 	width   = len("portico")
 	palette = []color.Color{Peach, Rosewater, Blue, Mauve, Green, Yellow, Red}
@@ -35,6 +38,11 @@ func Line(name string, style lipgloss.Style, text string) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if Sink != nil {
+		Sink(name, style, text)
+		return
+	}
+
 	if Raw {
 		lipgloss.Println(text)
 		return
@@ -50,7 +58,7 @@ func Line(name string, style lipgloss.Style, text string) {
 
 // Log prints a message from portico itself; in raw mode it goes to stderr.
 func Log(format string, args ...any) {
-	if Raw {
+	if Raw && Sink == nil {
 		mu.Lock()
 		defer mu.Unlock()
 		fmt.Fprintf(os.Stderr, "portico: "+format+"\n", args...)

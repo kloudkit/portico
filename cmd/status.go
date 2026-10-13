@@ -31,7 +31,7 @@ var statusCmd = &cobra.Command{
 			for _, r := range svc.Routes {
 				routes = append(routes, fmt.Sprintf("%s → :%d", r.Path, r.Port))
 			}
-			t.Row(svc.Name, svc.Kind, state(svc), strings.Join(routes, "\n"))
+			t.Row(svc.Name, svc.Kind, ui.State(svc), strings.Join(routes, "\n"))
 		}
 
 		if status.URL != "" {
@@ -41,17 +41,4 @@ var statusCmd = &cobra.Command{
 
 		return nil
 	},
-}
-
-func state(svc control.Service) string {
-	switch svc.State {
-	case "running", "up":
-		return ui.Good.Render(svc.State)
-	case "starting":
-		return ui.Warn.Render(svc.State)
-	case "exited":
-		return ui.Bad.Render(fmt.Sprintf("exited (%d)", *svc.ExitCode))
-	default:
-		return ui.Bad.Render(svc.State)
-	}
 }

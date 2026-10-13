@@ -26,6 +26,7 @@ type Service struct {
 	Kind     string  `json:"kind"`
 	State    string  `json:"state"`
 	ExitCode *int    `json:"exit_code,omitempty"`
+	Health   string  `json:"health,omitempty"`
 	Routes   []Route `json:"routes"`
 }
 

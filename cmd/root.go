@@ -54,7 +54,7 @@ func printError(w io.Writer, styles fang.Styles, err error) {
 
 func init() {
 	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (default: portico.yaml, searched upwards)")
-	rootCmd.AddCommand(upCmd, routesCmd, statusCmd, logsCmd, restartCmd, downCmd)
+	rootCmd.AddCommand(initCmd, upCmd, routesCmd, statusCmd, logsCmd, restartCmd, downCmd)
 }
 
 func addServiceFlags(cmd *cobra.Command) {
@@ -88,7 +88,9 @@ func locate(cmd *cobra.Command) (*config.Config, error) {
 	return config.Load(path)
 }
 
-func load(cmd *cobra.Command) (*config.Config, []routes.Route, error) {
+// load reads the config and resolves its routes. prev, when reloading, keeps the
+// free ports of services that didn't change.
+func load(cmd *cobra.Command, prev *config.Config) (*config.Config, []routes.Route, error) {
 	cfg, err := locate(cmd)
 	if err != nil {
 		return nil, nil, err
@@ -115,6 +117,9 @@ func load(cmd *cobra.Command) (*config.Config, []routes.Route, error) {
 
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
+	}
+	if prev != nil {
+		cfg.CarryPorts(prev)
 	}
 	if err := cfg.AssignFreePorts(); err != nil {
 		return nil, nil, err

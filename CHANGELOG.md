@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0] — Unreleased
+
+### Added
+
+- 🧙 Write a starter `portico.yaml` with `portico init`, picking from the compose files and dev scripts it finds
+- 🖥️ Watch every service live with `portico up --tui`
+- 👀 Reload on `portico.yaml` changes with `portico up --watch`, restarting only the services that changed
+- 🩺 Hold back requests to containers until Docker's healthcheck reports them healthy
+
+### Changed
+
+- 📝 Trim the README down to what you need to get going
+
+### Fixed
+
+- 📦 Put the CHANGELOG section into the GitHub release notes, which v0.1.1 missed
+
 ## [0.1.1] — 2026-10-13
 
 ### Added

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -29,8 +30,9 @@ type Config struct {
 	Proxy    Proxy              `yaml:"proxy"`
 	Services map[string]Service `yaml:"services"`
 
-	// Dir is where the config file lives; relative paths resolve against it.
-	Dir string `yaml:"-"`
+	// File is the config file, if there is one; Dir is where relative paths resolve.
+	File string `yaml:"-"`
+	Dir  string `yaml:"-"`
 }
 
 type Proxy struct {
@@ -62,6 +64,8 @@ type Service struct {
 
 	// HostPort is where an image service's port is published.
 	HostPort int `yaml:"-"`
+	// AutoPort is set when Port was picked by AssignFreePorts.
+	AutoPort bool `yaml:"-"`
 }
 
 // Port is a port number, or "none" for a run service that serves nothing.
@@ -155,6 +159,11 @@ func Discover(dir string) (string, error) {
 }
 
 func Load(path string) (*Config, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -165,7 +174,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("%s:\n%s", path, yaml.FormatError(err, false, true))
 	}
 
-	cfg.Dir = filepath.Dir(path)
+	cfg.File, cfg.Dir = path, filepath.Dir(path)
 	if cfg.Services == nil {
 		cfg.Services = map[string]Service{}
 	}
@@ -280,12 +289,50 @@ func (c *Config) AssignFreePorts() error {
 		if kind == KindImage {
 			s.HostPort = port
 		} else {
-			s.Port = Port(port)
+			s.Port, s.AutoPort = Port(port), true
 		}
 		c.Services[name] = s
 	}
 
 	return nil
+}
+
+// CarryPorts keeps the ports AssignFreePorts gave services that haven't changed
+// since prev, so a reload doesn't move them.
+func (c *Config) CarryPorts(prev *Config) {
+	for name, s := range c.Services {
+		old, ok := prev.Services[name]
+		if !ok {
+			continue
+		}
+
+		raw := old
+		if raw.AutoPort {
+			raw.Port = 0
+		}
+		raw.HostPort, raw.AutoPort = 0, false
+
+		if reflect.DeepEqual(raw, s) {
+			c.Services[name] = old
+		}
+	}
+}
+
+// Changed lists services that differ between prev and c, including added and removed ones.
+func (c *Config) Changed(prev *Config) []string {
+	var names []string
+	for _, name := range c.Names() {
+		if !reflect.DeepEqual(prev.Services[name], c.Services[name]) {
+			names = append(names, name)
+		}
+	}
+	for _, name := range prev.Names() {
+		if _, ok := c.Services[name]; !ok {
+			names = append(names, name)
+		}
+	}
+
+	return names
 }
 
 // Project identifies this config's directory, for container labels and the control socket.

@@ -187,3 +187,57 @@ func TestNoLogFile(t *testing.T) {
 		t.Errorf("tail: %v", st.Logs)
 	}
 }
+
+func TestParseHealth(t *testing.T) {
+	for status, want := range map[string]string{
+		"Up 3 minutes (healthy)":          "healthy",
+		"Up 3 minutes (unhealthy)":        "unhealthy",
+		"Up 2 seconds (health: starting)": "starting",
+		"Up 3 minutes":                    "",
+	} {
+		if got := parseHealth(status); got != want {
+			t.Errorf("%q: got %q", status, got)
+		}
+	}
+
+	docker := labelMap("com.docker.compose.service=api,com.docker.compose.project.config_files=/a/compose.yaml")
+	podman := labelMap(map[string]any{"com.docker.compose.service": "api"})
+	if docker["com.docker.compose.service"] != "api" || docker["com.docker.compose.project.config_files"] != "/a/compose.yaml" || podman["com.docker.compose.service"] != "api" {
+		t.Errorf("labels: %v %v", docker, podman)
+	}
+}
+
+func TestApply(t *testing.T) {
+	s, cancel, done := start(t, map[string]config.Service{
+		"child": {Run: "echo one; sleep 60", Port: 1},
+		"crash": {Run: "echo keep; sleep 60", Port: 1},
+	})
+	defer func() { cancel(); <-done }()
+
+	read := func(name string) string {
+		data, _ := os.ReadFile(filepath.Join(s.dir, ".portico", "logs", name+".log"))
+		return string(data)
+	}
+	eventually(t, func() bool { return read("child") == "one\n" && read("crash") == "keep\n" })
+
+	cfg := config.Default()
+	cfg.Dir = s.dir
+	cfg.Services = map[string]config.Service{
+		"child": {Run: "echo two; sleep 60", Port: 1},
+		"crash": {Run: "echo keep; sleep 60", Port: 1},
+	}
+	if err := s.Apply(cfg, []string{"child"}); err != nil {
+		t.Fatal(err)
+	}
+
+	eventually(t, func() bool { return read("child") == "two\n" })
+	if read("crash") != "keep\n" {
+		t.Errorf("unchanged service was restarted: %q", read("crash"))
+	}
+
+	delete(cfg.Services, "crash")
+	s.Apply(cfg, []string{"crash"})
+	if _, ok := s.Status("crash"); ok {
+		t.Error("removed service is still supervised")
+	}
+}
