@@ -50,7 +50,7 @@ func (c *Config) ApplyRoutes(routes []string) error {
 			name = fmt.Sprintf("%s-%d", name, port)
 		}
 
-		c.Services[name] = Service{Port: port, Route: path}
+		c.Services[name] = Service{Port: Port(port), Route: path}
 	}
 
 	return nil

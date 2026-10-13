@@ -67,3 +67,24 @@ func TestAssignFreePorts(t *testing.T) {
 		t.Error("api port was overwritten")
 	}
 }
+
+func TestPortNone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "portico.yaml")
+	os.WriteFile(path, []byte("services:\n  worker:\n    run: ./work\n    port: none\n  api:\n    port: 3200\n"), 0o644)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Services["worker"].Port != NoPort || cfg.Services["api"].Port != 3200 {
+		t.Fatalf("ports: %+v", cfg.Services)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.Services["api"] = Service{Port: NoPort}
+	if err := cfg.Validate(); err == nil {
+		t.Error("port: none should be rejected for an attached service")
+	}
+}

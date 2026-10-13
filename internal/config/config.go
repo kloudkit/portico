@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -44,7 +45,7 @@ type Service struct {
 	Tag     string            `yaml:"tag"`
 	Compose string            `yaml:"compose"`
 	Service string            `yaml:"service"`
-	Port    int               `yaml:"port"`
+	Port    Port              `yaml:"port"`
 	Route   string            `yaml:"route"`
 	Routes  map[string]string `yaml:"routes"`
 	Strip   *bool             `yaml:"strip"`
@@ -53,6 +54,27 @@ type Service struct {
 
 	// HostPort is where an image service's port is published.
 	HostPort int `yaml:"-"`
+}
+
+// Port is a port number, or "none" for a run service that serves nothing.
+type Port int
+
+const NoPort Port = -1
+
+func (p *Port) UnmarshalYAML(data []byte) error {
+	value := strings.TrimSpace(string(data))
+	if value == "none" {
+		*p = NoPort
+		return nil
+	}
+
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("port must be a number or none, got %s", value)
+	}
+	*p = Port(n)
+
+	return nil
 }
 
 type Kind string
@@ -177,8 +199,13 @@ func (c *Config) Validate() error {
 			fail("%s: only one of run, image or compose may be set", at)
 		}
 
-		if s.Port != 0 && !validPort(s.Port) {
+		if s.Port == NoPort && s.Kind() != KindRun {
+			fail("%s.port: none is only valid with run", at)
+		} else if s.Port != 0 && s.Port != NoPort && !validPort(int(s.Port)) {
 			fail("%s.port: %d is not a valid port", at, s.Port)
+		}
+		if s.Port == NoPort && s.Route != "" {
+			fail("%s.route: a service without a port has nothing to route", at)
 		}
 		if s.Host != "" && s.Host != "preserve" {
 			fail("%s.host: %q must be preserve or unset", at, s.Host)
@@ -228,7 +255,7 @@ func (c *Config) AssignFreePorts() error {
 		if kind == KindImage {
 			s.HostPort = port
 		} else {
-			s.Port = port
+			s.Port = Port(port)
 		}
 		c.Services[name] = s
 	}

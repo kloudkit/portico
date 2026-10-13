@@ -120,6 +120,9 @@ A service is one of:
 - **only `port`:** something you start yourself, such as an API under a
   debugger. Portico routes to it and reports when it's up or down.
 
+A `run` service that serves nothing, such as a queue worker, takes
+`port: none`: Portico runs it but doesn't route to it.
+
 | Key       | Description                                                          |
 | --------- | -------------------------------------------------------------------- |
 | `run`     | Shell command to start.                                              |

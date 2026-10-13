@@ -7,6 +7,7 @@
 - 🚪 Serve every local service through one proxy port with `portico up`
 - 🏃 Start `run` commands, `image` containers and `compose` files, and stop them all on `Ctrl-C`
 - 🎲 Give `run` services without a port a free one, through `{port}` and `PORT`
+- 👷 Run background workers without a route using `port: none`
 - 📜 Stream every service's output under its name, and write it to `.portico/logs`
 - 💥 Report a crashed service's exit code and last lines in its `503`
 - 🙈 Keep noisy services off the screen with `quiet` or `--hide`, and add `--timestamps` and `--raw`

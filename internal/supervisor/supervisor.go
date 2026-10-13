@@ -91,7 +91,9 @@ func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
 
 		switch kind {
 		case config.KindRun:
-			u.port = svc.Port
+			if svc.Port != config.NoPort {
+				u.port = int(svc.Port)
+			}
 			u.command = s.shell(svc)
 		case config.KindImage:
 			u.port = svc.HostPort
@@ -320,12 +322,18 @@ func (u *unit) line(text string) {
 }
 
 func (s *Supervisor) shell(svc config.Service) func(context.Context) *exec.Cmd {
-	command := strings.ReplaceAll(svc.Run, "{port}", strconv.Itoa(svc.Port))
+	command := svc.Run
+	env := []string{"PYTHONUNBUFFERED=1"}
+	if svc.Port != config.NoPort {
+		port := strconv.Itoa(int(svc.Port))
+		command = strings.ReplaceAll(command, "{port}", port)
+		env = append(env, "PORT="+port)
+	}
 
 	return func(ctx context.Context) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
 		cmd.Dir = s.dir
-		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(svc.Port), "PYTHONUNBUFFERED=1")
+		cmd.Env = append(os.Environ(), env...)
 		if !ui.Raw && term.IsTerminal(os.Stdout.Fd()) {
 			cmd.Env = append(cmd.Env, "FORCE_COLOR=1")
 		}

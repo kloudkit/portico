@@ -53,7 +53,9 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 			add(route, name, s.HostPort)
 			continue
 		case config.KindRun, config.KindAttached:
-			add(route, name, s.Port)
+			if s.Port != config.NoPort {
+				add(route, name, int(s.Port))
+			}
 			continue
 		}
 
@@ -77,7 +79,7 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 				return nil, fmt.Errorf("services.%s: compose service %q not found or publishes no ports", name, s.Service)
 			}
 			if s.Port != 0 {
-				published = []int{s.Port}
+				published = []int{int(s.Port)}
 			}
 			addPorts(add, route, name+"/"+s.Service, published)
 			continue

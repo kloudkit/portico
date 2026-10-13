@@ -146,7 +146,7 @@ func controlHandler(cfg *config.Config, rs []routes.Route, sup *supervisor.Super
 				state = "up"
 			case state == "":
 				state = "down"
-			case state == "starting" && ready:
+			case state == "starting" && (ready || svc.Routes == nil):
 				state = "running"
 			}
 			svc.State = state
