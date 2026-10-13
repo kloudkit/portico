@@ -1,6 +1,6 @@
 ![Portico — many services, one front door by KloudKIT](https://raw.githubusercontent.com/kloudkit/portico/main/brand/portico-banner.svg)
 
-# KloudKIT Portico
+# KloudKIT • Portico
 
 A web app in development is rarely one process: a frontend dev server, an API,
 maybe a config server and a websocket service, each on its own port. That works
@@ -140,6 +140,37 @@ portico restart api
 portico down                # stop everything, even after Portico was killed
 ```
 
+### Command reference
+
+| Command                   | Description                                                   |
+| ------------------------- | ------------------------------------------------------------- |
+| `portico init`            | Write a starter `portico.yaml` from what's in this directory. |
+| `portico up [service…]`   | Start your services and the proxy in front of them.           |
+| `portico routes`          | Print the resolved route table without starting anything.     |
+| `portico status`          | Show the state of every service of a running Portico.         |
+| `portico logs [service…]` | Print service output from `.portico/logs`.                    |
+| `portico restart <svc>…`  | Restart services of a running Portico.                        |
+| `portico down`            | Stop a running Portico, or clean up what a crashed one left.  |
+
+Every command takes `-c`, `--config FILE` to point at a `portico.yaml` instead of
+searching upwards for one.
+
+| Flag                         | Command | Description                                                       |
+| ---------------------------- | ------- | ----------------------------------------------------------------- |
+| `--run name=command`         | `up`    | Run a service; `{port}` is substituted.                           |
+| `--route /path=port\|name`   | `up`    | Route a path to a port or a service.                              |
+| `--port`, `--host`, `--base` | `up`    | Override the proxy's port, address and route prefix.              |
+| `--tui`                      | `up`    | Show a live dashboard instead of the log stream.                  |
+| `--watch`                    | `up`    | Reload when `portico.yaml` changes, restarting only what changed. |
+| `--hide service`             | `up`    | Keep a service's output off the screen (it is still logged).      |
+| `--timestamps`               | `up`    | Prefix every line with the time.                                  |
+| `--raw`                      | `up`    | Print output without prefixes or colors.                          |
+| `--no-logs`                  | `up`    | Don't write service output to `.portico/logs`.                    |
+| `-f`, `--follow`             | `logs`  | Keep printing new output.                                         |
+| `-n`, `--lines N`            | `logs`  | Lines to show from the end of each log *(default: `20`)*.         |
+| `-y`, `--yes`                | `init`  | Add everything found without asking.                              |
+| `--force`                    | `init`  | Replace an existing `portico.yaml`.                               |
+
 ## Behind the scenes
 
 - **Containers:** an image or compose service with a Docker `HEALTHCHECK` is
@@ -156,8 +187,8 @@ portico down                # stop everything, even after Portico was killed
 
 ## License
 
-Released under the [**MIT License**](LICENSE), **except** the [`brand/`](brand)
-directory.
+Released under the [**MIT License**](https://github.com/kloudkit/portico/blob/main/LICENSE),
+**except** the [`brand/`](https://github.com/kloudkit/portico/tree/main/brand) directory.
 
 The Portico and KloudKIT logos, icons and other brand assets are proprietary and
-**all rights reserved**; see [`brand/LICENSE`](brand/LICENSE).
+**all rights reserved**; see [`brand/LICENSE`](https://github.com/kloudkit/portico/blob/main/brand/LICENSE).
