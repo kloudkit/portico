@@ -1,12 +1,9 @@
 # Contributing
 
-Hi there!
+Thanks for wanting to help.
 
-We're thrilled that you'd like to contribute to this project.
-Your help is essential for keeping it great.
-
-To get started, have a look at our in-depth [documentation](https://ws.kloudkit.com/contribute)
-
----
-
-Looking forward to your awesome contribution!
+1. Open an issue first for anything bigger than a small fix, so we can agree on
+   the approach.
+2. Install the hooks with `pre-commit install`.
+3. Keep changes focused, and run `go test ./...` before opening a pull request.
+4. Add a line to `CHANGELOG.md` under the unreleased version.

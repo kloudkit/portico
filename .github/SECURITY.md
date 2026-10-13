@@ -1,10 +1,10 @@
 # Security Policy
 
-If you believe you have discovered a vulnerability in any KloudKIT project,
-**please email <info@kloudkit.com>** or open a [confidential GitHub advisory][] with a
-clear description and proof-of-concept *(if applicable)*.
+If you believe you have found a vulnerability in Portico, **please email
+<info@kloudkit.com>** or open a [confidential GitHub advisory][] with a clear
+description and a proof of concept *(if applicable)*.
 
-Full details of our responsible disclosure process are on the [Security Advisory page][].
+Please don't open a public issue for it. We'll confirm we got your report and
+keep you posted until it's fixed.
 
-[Security Advisory page]: https://ws.kloudkit.com/contribute/security-advisory
-[confidential GitHub advisory]: https://github.com/kloudkit/portico/security/advisories
+[confidential GitHub advisory]: https://github.com/kloudkit/portico/security/advisories/new

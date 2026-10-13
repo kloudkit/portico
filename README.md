@@ -33,9 +33,16 @@ Portico, and Portico routes each path to the right service.
 
 ## Installation
 
+Grab a binary from the [releases](https://github.com/kloudkit/portico/releases):
+
 ```sh
-go install github.com/kloudkit/portico@latest
+curl -fsSL -o /usr/local/bin/portico \
+  https://github.com/kloudkit/portico/releases/latest/download/portico-amd64
+chmod +x /usr/local/bin/portico
 ```
+
+Use `portico-arm64` on arm64. With Go 1.27 or newer you can also
+`go install github.com/kloudkit/portico@latest`.
 
 ## Quick start
 

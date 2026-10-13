@@ -12,3 +12,4 @@
 - 🧾 Answer with JSON when a service is down, unreachable or not routed
 - 🔍 Find `portico.yaml` in parent directories up to the git root
 - 🚩 Run without a config file using `--route`, `--port`, `--host` and `--base`
+- 📦 Publish linux amd64 and arm64 binaries on every `v*` tag

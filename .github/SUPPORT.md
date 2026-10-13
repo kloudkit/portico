@@ -11,8 +11,8 @@ This is a community-driven, open-source project; **we do not provide commercial 
  | 🐞 Bugs / Ideas      | [GitHub Issues][]         |
  | 🔒 Sensitive issues  | <info@kloudkit.com>       |
 
-For contribution guidelines, see our [How to Contribute][] page.
+For contribution guidelines, see [CONTRIBUTING.md][].
 
 [README]: https://github.com/kloudkit/portico#readme
 [GitHub Issues]: https://github.com/kloudkit/portico/issues
-[How to Contribute]: https://ws.kloudkit.com/contribute
+[CONTRIBUTING.md]: https://github.com/kloudkit/portico/blob/main/.github/CONTRIBUTING.md
