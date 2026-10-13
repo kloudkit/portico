@@ -87,8 +87,8 @@ func TestStopKillsTheProcessGroup(t *testing.T) {
 	cancel()
 	<-done
 
-	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err == nil && !strings.Contains(string(stat), ") Z ") {
-		t.Errorf("grandchild %d survived: %s", pid, stat)
-	}
+	eventually(t, func() bool {
+		stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		return err != nil || strings.Contains(string(stat), ") Z ")
+	})
 }
