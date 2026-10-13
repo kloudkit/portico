@@ -13,3 +13,5 @@
 - 🔍 Find `portico.yaml` in parent directories up to the git root
 - 🚩 Run without a config file using `--route`, `--port`, `--host` and `--base`
 - 📦 Publish linux amd64 and arm64 binaries on every `v*` tag
+- 🌐 Answer CORS for any origin by default, or only for those listed in `proxy.cors`
+- 🏠 Forward the browser's `Host` for services with `host: preserve`

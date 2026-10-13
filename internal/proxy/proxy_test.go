@@ -55,7 +55,7 @@ func TestRouting(t *testing.T) {
 		{Path: "/", Service: "web", Kind: config.KindAttached, Port: web, Strip: true},
 		{Path: "/api", Service: "api", Kind: config.KindAttached, Port: api, Strip: true},
 		{Path: "/keep", Service: "keep", Kind: config.KindAttached, Port: api, Strip: false},
-	})
+	}, nil)
 	ready(p)
 
 	tests := []struct {
@@ -82,7 +82,7 @@ func TestRouting(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	p := New([]routes.Route{{Path: "/api", Service: "api", Port: 1}})
+	p := New([]routes.Route{{Path: "/api", Service: "api", Port: 1}}, nil)
 
 	if code, body := get(t, p, "/other"); code != http.StatusNotFound || body["error"] != "no_route" {
 		t.Errorf("no route: got %d %v", code, body)
@@ -95,5 +95,69 @@ func TestErrors(t *testing.T) {
 	ready(p)
 	if code, body := get(t, p, "/api/x"); code != http.StatusBadGateway || body["error"] != "upstream_unavailable" {
 		t.Errorf("unreachable: got %d %v", code, body)
+	}
+}
+
+func TestCORS(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "https://app.example")
+		w.Write([]byte("{}"))
+	}))
+	t.Cleanup(srv.Close)
+	u, _ := url.Parse(srv.URL)
+	port, _ := strconv.Atoi(u.Port())
+
+	rs := []routes.Route{{Path: "/api", Service: "api", Port: port, Strip: true}}
+	const origin = "https://other.example"
+
+	send := func(p *Proxy, method string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/x", nil)
+		req.Header.Set("Origin", origin)
+		if method == http.MethodOptions {
+			req.Header.Set("Access-Control-Request-Method", "POST")
+			req.Header.Set("Access-Control-Request-Headers", "content-type")
+		}
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, cors := range [][]string{{"*"}, {origin}} {
+		p := New(rs, cors)
+		ready(p)
+
+		pre := send(p, http.MethodOptions)
+		if pre.Code != http.StatusNoContent || pre.Header().Get("Access-Control-Allow-Headers") != "content-type" {
+			t.Errorf("%v preflight: %d %v", cors, pre.Code, pre.Header())
+		}
+
+		got := send(p, http.MethodGet).Header().Values("Access-Control-Allow-Origin")
+		if len(got) != 1 || got[0] != origin {
+			t.Errorf("%v allow-origin: %v", cors, got)
+		}
+	}
+
+	p := New(rs, []string{"https://only.example"})
+	ready(p)
+
+	if got := send(p, http.MethodGet).Header().Values("Access-Control-Allow-Origin"); len(got) != 1 || got[0] != "https://app.example" {
+		t.Errorf("disallowed origin should get the app's own headers, got %v", got)
+	}
+}
+
+func TestPreserveHost(t *testing.T) {
+	port := upstream(t)
+	p := New([]routes.Route{{Path: "/", Service: "web", Port: port, PreserveHost: true}}, nil)
+	ready(p)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "4400-ws.example.dev"
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, req)
+
+	var body map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["host"] != "4400-ws.example.dev" {
+		t.Errorf("host: got %v", body["host"])
 	}
 }

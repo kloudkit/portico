@@ -31,6 +31,9 @@ type Proxy struct {
 	Engine string `yaml:"engine"`
 	Image  string `yaml:"image"`
 	Tag    string `yaml:"tag"`
+
+	// CORS origins to allow; "*" allows any, an empty list disables CORS.
+	CORS []string `yaml:"cors"`
 }
 
 type Service struct {
@@ -43,6 +46,7 @@ type Service struct {
 	Route   string            `yaml:"route"`
 	Routes  map[string]string `yaml:"routes"`
 	Strip   *bool             `yaml:"strip"`
+	Host    string            `yaml:"host"`
 	Quiet   bool              `yaml:"quiet"`
 }
 
@@ -82,6 +86,7 @@ func Default() *Config {
 			Engine: "builtin",
 			Image:  "nginx",
 			Tag:    "stable-alpine",
+			CORS:   []string{"*"},
 		},
 		Services: map[string]Service{},
 	}
@@ -146,6 +151,11 @@ func (c *Config) Validate() error {
 	if !strings.HasPrefix(c.Proxy.Base, "/") {
 		fail("proxy.base: %q must start with /", c.Proxy.Base)
 	}
+	for _, origin := range c.Proxy.CORS {
+		if origin != "*" && !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
+			fail("proxy.cors: %q must be * or start with http:// or https://", origin)
+		}
+	}
 
 	for _, name := range c.Names() {
 		s := c.Services[name]
@@ -163,6 +173,9 @@ func (c *Config) Validate() error {
 
 		if s.Port != 0 && !validPort(s.Port) {
 			fail("%s.port: %d is not a valid port", at, s.Port)
+		}
+		if s.Host != "" && s.Host != "preserve" {
+			fail("%s.host: %q must be preserve or unset", at, s.Host)
 		}
 		if s.Route != "" && !strings.HasPrefix(s.Route, "/") {
 			fail("%s.route: %q must start with /", at, s.Route)

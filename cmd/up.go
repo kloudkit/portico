@@ -45,7 +45,7 @@ var upCmd = &cobra.Command{
 			return err
 		}
 
-		p := proxy.New(rs)
+		p := proxy.New(rs, cfg.Proxy.CORS)
 		srv := &http.Server{Handler: p, ReadHeaderTimeout: 10 * time.Second}
 
 		lipgloss.Println(ui.Routes(rs))

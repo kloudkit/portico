@@ -18,6 +18,8 @@ type Route struct {
 	Kind    config.Kind
 	Port    int
 	Strip   bool
+
+	PreserveHost bool
 }
 
 // Resolve expands every service into its routes, sorted by path.
@@ -39,6 +41,8 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 				Kind:    s.Kind(),
 				Port:    port,
 				Strip:   s.Stripped(),
+
+				PreserveHost: s.Host == "preserve",
 			})
 		}
 

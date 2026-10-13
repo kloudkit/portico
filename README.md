@@ -90,6 +90,7 @@ portico routes
 | `host`   | `0.0.0.0` | Address Portico listens on.         |
 | `base`   | `/`       | Prefix mounted in front of routes.  |
 | `engine` | `builtin` | Proxy engine.                       |
+| `cors`   | `["*"]`   | Origins allowed to call Portico cross-origin. |
 
 ### Services
 
@@ -98,12 +99,37 @@ portico routes
 | `port`    | Port the service listens on.                                         |
 | `route`   | Path to mount it at *(default: `/<name>`)*.                          |
 | `strip`   | Remove the route prefix before forwarding *(default: `true`)*.       |
+| `host`    | `preserve` forwards the browser's `Host` instead of `localhost:<port>`. |
 | `compose` | Compose file; every service with published ports gets a route.      |
 | `service` | With `compose`, route a single compose service at `route`.          |
 | `routes`  | With `compose`, override the path of individual compose services.   |
 
 A compose service with several published ports is mounted at
 `<route>/<port>` for each one. With `service`, set `port` to pick one.
+
+### CORS
+
+The browser only talks to Portico, so your own frontend never needs CORS. It
+matters when something on another origin calls Portico, such as a frontend on
+another workstation. Portico answers those itself: preflights get a `204`, and
+the app's own `Access-Control-*` headers are dropped so there's one set.
+
+Any origin is allowed by default. List origins to allow only those, or set
+`cors: []` to leave CORS to your app:
+
+```yaml
+proxy:
+  cors:
+    - https://4400-other.cluster.cloudworkstations.dev
+```
+
+### Host and origin checks
+
+Upstreams see `Host: localhost:<port>` so dev-server host checks pass, and the
+real host arrives in `X-Forwarded-Host` and `X-Forwarded-Proto`. Apps that
+compare `Origin` to the host (Django's CSRF check, for one) need to trust those
+headers, e.g. `USE_X_FORWARDED_HOST` and `SECURE_PROXY_SSL_HEADER` in Django.
+Set `host: preserve` on a service that needs the original `Host` instead.
 
 ### Flags
 

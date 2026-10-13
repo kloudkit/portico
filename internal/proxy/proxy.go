@@ -18,6 +18,7 @@ import (
 
 type Proxy struct {
 	targets []*target
+	cors    []string
 }
 
 type target struct {
@@ -26,8 +27,9 @@ type target struct {
 	ready atomic.Bool
 }
 
-func New(rs []routes.Route) *Proxy {
-	p := &Proxy{}
+// New builds the proxy. cors lists the origins it answers CORS for; "*" allows any.
+func New(rs []routes.Route, cors []string) *Proxy {
+	p := &Proxy{cors: cors}
 
 	for _, r := range rs {
 		t := &target{Route: r}
@@ -38,6 +40,9 @@ func New(rs []routes.Route) *Proxy {
 				pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
 				pr.SetURL(upstream)
 				pr.SetXForwarded()
+				if t.PreserveHost {
+					pr.Out.Host = pr.In.Host
+				}
 
 				// Keep what the gateway in front of us saw.
 				for _, h := range []string{"X-Forwarded-Host", "X-Forwarded-Proto"} {
@@ -55,6 +60,17 @@ func New(rs []routes.Route) *Proxy {
 				}
 			},
 			FlushInterval: -1,
+			ModifyResponse: func(resp *http.Response) error {
+				// Portico already answered CORS for this origin; don't let the app add a second set.
+				if p.allowed(resp.Request.Header.Get("Origin")) {
+					for h := range resp.Header {
+						if strings.HasPrefix(h, "Access-Control-") {
+							resp.Header.Del(h)
+						}
+					}
+				}
+				return nil
+			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 				writeJSON(w, http.StatusBadGateway, map[string]any{
 					"error":   "upstream_unavailable",
@@ -74,6 +90,23 @@ func New(rs []routes.Route) *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if origin := r.Header.Get("Origin"); p.allowed(origin) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", origin)
+		h.Set("Access-Control-Allow-Credentials", "true")
+		h.Add("Vary", "Origin")
+
+		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+			h.Set("Access-Control-Allow-Methods", r.Header.Get("Access-Control-Request-Method"))
+			if headers := r.Header.Get("Access-Control-Request-Headers"); headers != "" {
+				h.Set("Access-Control-Allow-Headers", headers)
+			}
+			h.Set("Access-Control-Max-Age", "600")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	t := p.match(r.URL.Path)
 	if t == nil {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "no_route", "path": r.URL.Path})
@@ -112,6 +145,10 @@ func (p *Proxy) Watch(ctx context.Context, interval time.Duration, changed func(
 		case <-ticker.C:
 		}
 	}
+}
+
+func (p *Proxy) allowed(origin string) bool {
+	return origin != "" && (slices.Contains(p.cors, "*") || slices.Contains(p.cors, origin))
 }
 
 func (p *Proxy) match(path string) *target {
