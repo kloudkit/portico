@@ -48,7 +48,7 @@ func printError(w io.Writer, styles fang.Styles, err error) {
 
 func init() {
 	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (default: portico.yaml, searched upwards)")
-	rootCmd.AddCommand(upCmd, routesCmd)
+	rootCmd.AddCommand(upCmd, routesCmd, statusCmd, logsCmd, restartCmd, downCmd)
 }
 
 func addServiceFlags(cmd *cobra.Command) {
@@ -60,26 +60,32 @@ func addServiceFlags(cmd *cobra.Command) {
 	f.String("base", "", "prefix for all routes")
 }
 
-func load(cmd *cobra.Command) (*config.Config, []routes.Route, error) {
+// locate finds and reads the config file, or falls back to defaults in the current directory.
+func locate(cmd *cobra.Command) (*config.Config, error) {
 	path, _ := cmd.Flags().GetString("config")
 	if path == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if path, err = config.Discover(cwd); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	cfg := config.Default()
-	if path != "" {
-		var err error
-		if cfg, err = config.Load(path); err != nil {
-			return nil, nil, err
-		}
-	} else {
+	if path == "" {
+		cfg := config.Default()
 		cfg.Dir, _ = os.Getwd()
+		return cfg, nil
+	}
+
+	return config.Load(path)
+}
+
+func load(cmd *cobra.Command) (*config.Config, []routes.Route, error) {
+	cfg, err := locate(cmd)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	f := cmd.Flags()

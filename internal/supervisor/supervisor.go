@@ -3,8 +3,6 @@ package supervisor
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -45,17 +43,20 @@ type unit struct {
 	command func(ctx context.Context) *exec.Cmd
 	cleanup []string
 
-	mu    sync.Mutex
-	state string
-	code  int
-	tail  []string
-	log   *os.File
+	restart chan struct{}
+	pidFile string
+
+	mu     sync.Mutex
+	state  string
+	code   int
+	tail   []string
+	log    *os.File
+	cancel context.CancelFunc
 }
 
 // New prepares a unit for every service portico owns. only limits which ones start.
 func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
-	sum := sha256.Sum256([]byte(cfg.Dir))
-	s := &Supervisor{dir: cfg.Dir, project: hex.EncodeToString(sum[:4])}
+	s := &Supervisor{dir: cfg.Dir, project: cfg.Project()}
 
 	for _, name := range only {
 		svc, ok := cfg.Services[name]
@@ -135,6 +136,30 @@ func (s *Supervisor) Project() string {
 	return s.project
 }
 
+// Restart stops a service if it's running and starts it again.
+func (s *Supervisor) Restart(name string) error {
+	for _, u := range s.units {
+		if u.name != name {
+			continue
+		}
+
+		select {
+		case u.restart <- struct{}{}:
+		default:
+		}
+
+		u.mu.Lock()
+		if u.cancel != nil {
+			u.cancel()
+		}
+		u.mu.Unlock()
+
+		return nil
+	}
+
+	return fmt.Errorf("%s is not a service portico runs", name)
+}
+
 func (s *Supervisor) Names() []string {
 	names := make([]string, len(s.units))
 	for i, u := range s.units {
@@ -171,8 +196,11 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 
 	logs := filepath.Join(s.dir, ".portico", "logs")
-	if err := os.MkdirAll(logs, 0o755); err != nil {
-		return err
+	pids := filepath.Join(s.dir, ".portico", "pids")
+	for _, dir := range []string{logs, pids} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
 	os.WriteFile(filepath.Join(s.dir, ".portico", ".gitignore"), []byte("*\n"), 0o644)
 
@@ -187,10 +215,26 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			return err
 		}
 		u.log = f
+		u.pidFile = filepath.Join(pids, u.name)
+		u.restart = make(chan struct{}, 1)
 
 		wg.Go(func() {
 			defer f.Close()
-			u.run(ctx)
+			for {
+				run, cancel := context.WithCancel(ctx)
+				u.mu.Lock()
+				u.cancel = cancel
+				u.mu.Unlock()
+
+				u.run(run)
+				cancel()
+
+				select {
+				case <-ctx.Done():
+					return
+				case <-u.restart:
+				}
+			}
 		})
 	}
 
@@ -217,8 +261,10 @@ func (u *unit) run(ctx context.Context) {
 
 	err := cmd.Start()
 	if err == nil {
+		os.WriteFile(u.pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o644)
 		err = cmd.Wait()
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		os.Remove(u.pidFile)
 	}
 	out.flush()
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/kloudkit/portico/internal/config"
+	"github.com/kloudkit/portico/internal/control"
 	"github.com/kloudkit/portico/internal/engine"
 	"github.com/kloudkit/portico/internal/proxy"
 	"github.com/kloudkit/portico/internal/routes"
@@ -47,6 +49,13 @@ var upCmd = &cobra.Command{
 		if cfg.Proxy.Engine == "nginx" {
 			listen = "127.0.0.1:0"
 		}
+
+		socket := control.Socket(cfg.Project())
+		ctl, err := control.Listen(socket)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(socket)
 
 		ln, err := net.Listen("tcp", listen)
 		if err != nil {
@@ -99,15 +108,73 @@ var upCmd = &cobra.Command{
 			cancel()
 		})
 
+		ctlSrv := &http.Server{Handler: controlHandler(cfg, rs, sup, p, cancel)}
+		g.Add(func() error {
+			return ctlSrv.Serve(ctl)
+		}, func(error) {
+			ctlSrv.Close()
+		})
+
 		g.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
 
 		err = g.Run()
-		if errors.As(err, &run.SignalError{}) {
+		if errors.As(err, &run.SignalError{}) || errors.Is(err, context.Canceled) {
 			return nil
 		}
 
 		return err
 	},
+}
+
+func controlHandler(cfg *config.Config, rs []routes.Route, sup *supervisor.Supervisor, p *proxy.Proxy, stop func()) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
+		var services []control.Service
+		for _, name := range cfg.Names() {
+			svc := control.Service{Name: name, Kind: string(cfg.Services[name].Kind())}
+
+			ready := false
+			for _, r := range rs {
+				if r.Name == name {
+					svc.Routes = append(svc.Routes, control.Route{Path: r.Path, Port: r.Port, Ready: p.Ready(r.Path)})
+					ready = ready || p.Ready(r.Path)
+				}
+			}
+
+			state, detail := sup.Status(name)
+			switch {
+			case state == "" && ready:
+				state = "up"
+			case state == "":
+				state = "down"
+			case state == "starting" && ready:
+				state = "running"
+			}
+			svc.State = state
+			if code, ok := detail["exit_code"].(int); ok {
+				svc.ExitCode = &code
+			}
+
+			services = append(services, svc)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(services)
+	})
+
+	mux.HandleFunc("POST /restart/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if err := sup.Restart(r.PathValue("name")); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		}
+	})
+
+	mux.HandleFunc("POST /stop", func(http.ResponseWriter, *http.Request) {
+		ui.Log("stopping, requested by portico down")
+		stop()
+	})
+
+	return mux
 }
 
 // addNginx writes the nginx config and supervises nginx, locally or in a container.

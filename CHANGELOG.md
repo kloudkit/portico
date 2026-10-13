@@ -20,4 +20,6 @@
 - 📦 Publish linux amd64 and arm64 binaries on every `v*` tag
 - 🌐 Answer CORS for any origin by default, or only for those listed in `proxy.cors`
 - 🟩 Put nginx in front with `engine: nginx`, from `PATH` or a container, with the same routing and errors as the builtin engine
+- 🩺 Check on a running Portico from another terminal with `status`, `logs`, `restart` and `down`
+- 🧹 Clean up services left running by a crashed Portico with `portico down`
 - 🏠 Forward the browser's `Host` for services with `host: preserve`

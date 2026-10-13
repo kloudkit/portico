@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -232,6 +234,12 @@ func (c *Config) AssignFreePorts() error {
 	}
 
 	return nil
+}
+
+// Project identifies this config's directory, for container labels and the control socket.
+func (c *Config) Project() string {
+	sum := sha256.Sum256([]byte(c.Dir))
+	return hex.EncodeToString(sum[:4])
 }
 
 func (c *Config) Names() []string {

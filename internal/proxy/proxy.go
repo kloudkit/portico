@@ -159,6 +159,17 @@ func (p *Proxy) Watch(ctx context.Context, interval time.Duration, changed func(
 	}
 }
 
+// Ready reports whether the upstream behind a route path answered its last probe.
+func (p *Proxy) Ready(path string) bool {
+	for _, t := range p.targets {
+		if t.Path == path {
+			return t.ready.Load()
+		}
+	}
+
+	return false
+}
+
 func (p *Proxy) allowed(origin string) bool {
 	return origin != "" && (slices.Contains(p.cors, "*") || slices.Contains(p.cors, origin))
 }

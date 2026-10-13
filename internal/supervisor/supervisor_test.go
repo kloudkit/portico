@@ -92,3 +92,26 @@ func TestStopKillsTheProcessGroup(t *testing.T) {
 		return err != nil || strings.Contains(string(stat), ") Z ")
 	})
 }
+
+func TestRestart(t *testing.T) {
+	s, cancel, done := start(t, map[string]config.Service{
+		"crash": {Run: "echo started; sleep 60", Port: 1},
+	})
+	defer func() { cancel(); <-done }()
+
+	started := func() int {
+		data, _ := os.ReadFile(filepath.Join(s.dir, ".portico", "logs", "crash.log"))
+		return strings.Count(string(data), "started")
+	}
+
+	eventually(t, func() bool { return started() == 1 })
+
+	if err := s.Restart("crash"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, func() bool { return started() == 2 })
+
+	if err := s.Restart("missing"); err == nil {
+		t.Error("expected an error for an unknown service")
+	}
+}

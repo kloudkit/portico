@@ -1,3 +1,5 @@
+![Portico: many services, one front door, by KloudKIT](brand/portico-banner.svg)
+
 # KloudKIT Portico
 
 A web app in development is rarely one process. There's a frontend dev server, an
@@ -149,13 +151,27 @@ errors are the same too.
 
 Every service's output is prefixed with its name, and also written to
 `.portico/logs/<name>.log` next to the config. A service that exits is left
-down, so its error stays on screen; restart Portico to bring it back.
+down, so its error stays on screen; `portico restart <name>` brings it back.
 
 - **`--hide api,web`:** keep these off the screen.
 - **`--timestamps`:** add the time to every line.
 - **`--raw`:** no prefixes or colors, for piping.
 
 Pass service names to start only those: `portico up web api`.
+
+### From another terminal
+
+While `portico up` runs, these work from anywhere under the same config:
+
+```sh
+portico status              # every service, its state and routes
+portico logs api -f         # follow one service (or all, without a name)
+portico restart api         # stop and start a service
+portico down                # stop everything
+```
+
+If Portico itself was killed and left services running, `portico down` stops
+them too.
 
 ### CORS
 
@@ -196,5 +212,12 @@ portico up --port 8000 --route /=5173 --route /api=3200
 
 ## Status
 
-Portico is early. Next up are the `status`, `logs`, `restart` and `down`
-commands.
+Portico is early, and not tried widely yet. Expect rough edges.
+
+## License
+
+Released under the [**MIT License**](LICENSE), **except** the [`brand/`](brand)
+directory.
+
+The Portico and KloudKIT logos, icons and other brand assets are proprietary and
+**all rights reserved**; see [`brand/LICENSE`](brand/LICENSE).
