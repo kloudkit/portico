@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-10-13
 
 ### Added
 
@@ -24,3 +24,5 @@
 - 🩺 Check on a running Portico from another terminal with `status`, `logs`, `restart` and `down`
 - 🧹 Clean up services left running by a crashed Portico with `portico down`
 - 🏠 Forward the browser's `Host` for services with `host: preserve`
+
+[0.1.0]: https://github.com/kloudkit/portico/releases/tag/v0.1.0
