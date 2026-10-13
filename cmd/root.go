@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"charm.land/fang/v2"
 	"github.com/charmbracelet/x/term"
@@ -18,11 +20,15 @@ var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:   "portico",
-	Short: "One origin for all your local services",
-	Long:  "Portico runs your local services and serves them through a single proxy port, so the browser only ever talks to one origin.",
+	Short: "Many services, one front door",
+	Long:  "Many services, one front door.\n\nPortico runs your local services and serves them through a single port, so the browser only ever talks to one origin.",
 }
 
 func Execute() {
+	if info, ok := debug.ReadBuildInfo(); ok && version == "dev" && strings.HasPrefix(info.Main.Version, "v") {
+		version = strings.TrimPrefix(info.Main.Version, "v")
+	}
+
 	opts := []fang.Option{
 		fang.WithColorSchemeFunc(ui.FrappeColorScheme),
 		fang.WithVersion(version),

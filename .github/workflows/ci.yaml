@@ -3,6 +3,7 @@ name: 💻 CLI Build
 
 on:
   push:
+  pull_request:
 
 permissions:
   contents: read

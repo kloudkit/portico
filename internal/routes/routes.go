@@ -79,6 +79,9 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 				return nil, fmt.Errorf("services.%s: compose service %q not found or publishes no ports", name, s.Service)
 			}
 			if s.Port != 0 {
+				if !slices.Contains(published, int(s.Port)) {
+					return nil, fmt.Errorf("services.%s.port: compose service %s doesn't publish %d (it publishes %v)", name, s.Service, s.Port, published)
+				}
 				published = []int{int(s.Port)}
 			}
 			addPorts(add, route, name+"/"+s.Service, published)

@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/kloudkit/portico/main/portico.schema.json",
+  "title": "portico.yaml",
+  "description": "Services Portico runs and routes, and the proxy in front of them.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "runtime": {
+      "description": "Container runtime for image and compose services.",
+      "enum": ["auto", "docker", "podman"],
+      "default": "auto"
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": { "description": "Port Portico listens on.", "type": "integer", "minimum": 1, "maximum": 65535, "default": 4400 },
+        "host": { "description": "Address Portico listens on.", "type": "string", "default": "0.0.0.0" },
+        "base": { "description": "Prefix mounted in front of every route.", "type": "string", "pattern": "^/", "default": "/" },
+        "engine": { "description": "Proxy engine.", "enum": ["builtin", "nginx"], "default": "builtin" },
+        "image": { "description": "Image for the nginx engine.", "type": "string", "default": "nginx" },
+        "tag": { "description": "Tag for the nginx engine.", "type": "string" },
+        "cors": {
+          "description": "Origins allowed to call Portico cross-origin: *, an origin, or one with a leading *. in the host. An empty list leaves CORS to your app.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(\\*|https?://(\\*\\.)?[^/*]+)$" },
+          "default": ["*"]
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9_.-]*$", "not": { "enum": ["portico", "nginx"] } },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run": { "description": "Shell command to start. {port} is replaced with the service's port, also set as PORT.", "type": "string" },
+          "dir": { "description": "Directory to run the command in, relative to portico.yaml.", "type": "string" },
+          "image": { "description": "Container image to run.", "type": "string" },
+          "tag": { "description": "Image tag.", "type": "string" },
+          "compose": { "description": "Compose file to bring up.", "type": "string" },
+          "service": { "description": "With compose, the single compose service to route.", "type": "string" },
+          "port": {
+            "description": "Port the service listens on, or none for a run service that serves nothing.",
+            "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 65535 }, { "const": "none" }]
+          },
+          "route": { "description": "Path to mount the service at (default: /<name>).", "type": "string", "pattern": "^/" },
+          "routes": {
+            "description": "With compose, override the path of individual compose services.",
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^/" }
+          },
+          "strip": { "description": "Remove the route prefix before forwarding.", "type": "boolean", "default": true },
+          "host": { "description": "preserve forwards the browser's Host instead of localhost:<port>.", "const": "preserve" },
+          "quiet": { "description": "Keep the service's output off the screen.", "type": "boolean", "default": false },
+          "log": { "description": "Write the service's output to .portico/logs/<name>.log.", "type": "boolean", "default": true }
+        },
+        "not": {
+          "anyOf": [
+            { "required": ["run", "image"] },
+            { "required": ["run", "compose"] },
+            { "required": ["image", "compose"] }
+          ]
+        }
+      }
+    }
+  }
+}

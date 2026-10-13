@@ -16,7 +16,7 @@ var (
 
 	mu      sync.Mutex
 	width   = len("portico")
-	palette = []color.Color{Blue, Green, Peach, Mauve, Teal, Yellow, Red}
+	palette = []color.Color{Peach, Rosewater, Blue, Mauve, Green, Yellow, Red}
 )
 
 // Pad aligns every prefix to the longest of names.

@@ -51,13 +51,24 @@ func (n Nginx) AnyOrigin() bool {
 	return slices.Contains(n.CORS, "*")
 }
 
+// OriginPattern turns a CORS pattern into an nginx map key: exact, or a regex for "*." hosts.
+func OriginPattern(pattern string) string {
+	scheme, host, _ := strings.Cut(pattern, "://")
+	suffix, wildcard := strings.CutPrefix(host, "*")
+	if !wildcard {
+		return `"` + strings.ReplaceAll(pattern, `"`, `\"`) + `"`
+	}
+
+	return `"~^` + regexp.QuoteMeta(scheme+"://") + `[^/]+` + regexp.QuoteMeta(suffix) + `$"`
+}
+
 func (n Nginx) HasRoot() bool {
 	return slices.ContainsFunc(n.Routes, func(r routes.Route) bool { return r.Path == "/" })
 }
 
 var nginxTemplate = template.Must(template.New("nginx").Funcs(template.FuncMap{
 	"stripped": func(r nginxRoute) bool { return r.Strip && r.Path != "/" },
-	"quote":    func(s string) string { return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"` },
+	"origin":   OriginPattern,
 	"upstream": func(r nginxRoute) string { return fmt.Sprintf("portico_%d", r.ID) },
 	"regex":    regexp.QuoteMeta,
 }).Parse(`{{ define "location" }}
@@ -120,7 +131,7 @@ http {
     "~." $http_origin;
 {{- else }}
 {{- range .CORS }}
-    {{ quote . }} $http_origin;
+    {{ origin . }} $http_origin;
 {{- end }}
 {{- end }}
   }

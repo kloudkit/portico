@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +18,11 @@ import (
 )
 
 var FileNames = []string{"portico.yaml", ".portico.yaml"}
+
+var (
+	validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
+	reserved  = []string{"portico", "nginx"}
+)
 
 type Config struct {
 	Runtime  string             `yaml:"runtime"`
@@ -41,6 +47,7 @@ type Proxy struct {
 
 type Service struct {
 	Run     string            `yaml:"run"`
+	Dir     string            `yaml:"dir"`
 	Image   string            `yaml:"image"`
 	Tag     string            `yaml:"tag"`
 	Compose string            `yaml:"compose"`
@@ -51,6 +58,7 @@ type Service struct {
 	Strip   *bool             `yaml:"strip"`
 	Host    string            `yaml:"host"`
 	Quiet   bool              `yaml:"quiet"`
+	Log     *bool             `yaml:"log"`
 
 	// HostPort is where an image service's port is published.
 	HostPort int `yaml:"-"`
@@ -97,6 +105,10 @@ func (s Service) Kind() Kind {
 	default:
 		return KindAttached
 	}
+}
+
+func (s Service) Logged() bool {
+	return s.Log == nil || *s.Log
 }
 
 func (s Service) Stripped() bool {
@@ -180,14 +192,21 @@ func (c *Config) Validate() error {
 		fail("proxy.base: %q must start with /", c.Proxy.Base)
 	}
 	for _, origin := range c.Proxy.CORS {
-		if origin != "*" && !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
-			fail("proxy.cors: %q must be * or start with http:// or https://", origin)
+		if !validOrigin(origin) {
+			fail("proxy.cors: %q must be *, or an http(s) origin with an optional leading *. in the host", origin)
 		}
 	}
 
 	for _, name := range c.Names() {
 		s := c.Services[name]
 		at := "services." + name
+
+		if !validName.MatchString(name) {
+			fail("%s: names may only use a-z, 0-9, _, . and -", at)
+		}
+		if slices.Contains(reserved, name) {
+			fail("%s: %s is reserved", at, name)
+		}
 
 		set := 0
 		for _, v := range []string{s.Run, s.Image, s.Compose} {
@@ -220,6 +239,12 @@ func (c *Config) Validate() error {
 		}
 		if s.Tag != "" && kind != KindImage {
 			fail("%s.tag: only valid with image", at)
+		}
+		if s.Dir != "" && kind != KindRun {
+			fail("%s.dir: only valid with run", at)
+		}
+		if kind == KindCompose && s.Port != 0 && s.Service == "" {
+			fail("%s.port: picks one of a compose service's ports, so it needs service", at)
 		}
 		if (s.Service != "" || s.Routes != nil) && kind != KindCompose {
 			fail("%s: service and routes are only valid with compose", at)
@@ -300,6 +325,36 @@ func (c *Config) RuntimeBinary() (string, error) {
 	}
 
 	return "", errors.New("runtime: neither docker nor podman found in PATH")
+}
+
+func validOrigin(origin string) bool {
+	if origin == "*" {
+		return true
+	}
+
+	scheme, host, ok := strings.Cut(origin, "://")
+	if !ok || (scheme != "http" && scheme != "https") || host == "" || strings.Contains(host, "/") {
+		return false
+	}
+
+	return !strings.Contains(strings.TrimPrefix(host, "*."), "*")
+}
+
+// MatchOrigin reports whether origin matches a CORS pattern: "*", an exact
+// origin, or one with a leading "*." that matches any subdomain.
+func MatchOrigin(pattern, origin string) bool {
+	if pattern == "*" || pattern == origin {
+		return origin != ""
+	}
+
+	scheme, host, _ := strings.Cut(pattern, "://")
+	suffix, ok := strings.CutPrefix(host, "*")
+	if !ok {
+		return false
+	}
+
+	rest, ok := strings.CutPrefix(origin, scheme+"://")
+	return ok && len(rest) > len(suffix) && strings.HasSuffix(rest, suffix) && !strings.Contains(rest, "/")
 }
 
 func validPort(p int) bool {

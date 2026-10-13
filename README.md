@@ -65,6 +65,12 @@ Open `http://localhost:4400` (or the forwarded URL for port `4400`). Calls to
 
 ## Configuration
 
+For autocompletion and checks in your editor, start `portico.yaml` with:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kloudkit/portico/main/portico.schema.json
+```
+
 Portico looks for `portico.yaml` or `.portico.yaml` in the current directory and
 its parents, up to the git root. Use `-c` to point elsewhere.
 
@@ -121,11 +127,16 @@ A service is one of:
   debugger. Portico routes to it and reports when it's up or down.
 
 A `run` service that serves nothing, such as a queue worker, takes
-`port: none`: Portico runs it but doesn't route to it.
+`port: none`: Portico runs it but doesn't route to it. Give a `run` service
+`dir: frontend` to start it in that directory, relative to `portico.yaml`.
+
+Service names use lowercase letters, digits, `_`, `.` and `-`; `portico` and
+`nginx` are reserved.
 
 | Key       | Description                                                          |
 | --------- | -------------------------------------------------------------------- |
 | `run`     | Shell command to start.                                              |
+| `dir`     | Directory to run it in *(default: next to `portico.yaml`)*.          |
 | `image`   | Container image to run.                                              |
 | `tag`     | Image tag *(default: `latest`)*.                                     |
 | `port`    | Port the service listens on.                                         |
@@ -136,9 +147,10 @@ A `run` service that serves nothing, such as a queue worker, takes
 | `service` | With `compose`, route a single compose service at `route`.          |
 | `routes`  | With `compose`, override the path of individual compose services.   |
 | `quiet`   | Keep its output off the screen.                                      |
+| `log`     | `false` writes no log file for it.                                   |
 
 A compose service with several published ports is mounted at
-`<route>/<port>` for each one. With `service`, set `port` to pick one.
+`<route>/<port>` for each one. With `service`, set `port` to pick one of them.
 
 ### Engines
 
@@ -153,12 +165,14 @@ errors are the same too.
 ### Output
 
 Every service's output is prefixed with its name, and also written to
-`.portico/logs/<name>.log` next to the config. A service that exits is left
+`.portico/logs/<name>.log` next to the config. A log is moved aside to
+`<name>.log.1` once it reaches 10 MB, so each service keeps at most about 20 MB. A service that exits is left
 down, so its error stays on screen; `portico restart <name>` brings it back.
 
 - **`--hide api,web`:** keep these off the screen.
 - **`--timestamps`:** add the time to every line.
 - **`--raw`:** no prefixes or colors, for piping.
+- **`--no-logs`:** write no log files; `log: false` does it for one service.
 
 Pass service names to start only those: `portico up web api`.
 
@@ -167,7 +181,7 @@ Pass service names to start only those: `portico up web api`.
 While `portico up` runs, these work from anywhere under the same config:
 
 ```sh
-portico status              # every service, its state and routes
+portico status              # every service, its state, routes and public URL
 portico logs api -f         # follow one service (or all, without a name)
 portico restart api         # stop and start a service
 portico down                # stop everything
@@ -183,13 +197,14 @@ matters when something on another origin calls Portico, such as a frontend on
 another workstation. Portico answers those itself: preflights get a `204`, and
 the app's own `Access-Control-*` headers are dropped so there's one set.
 
-Any origin is allowed by default. List origins to allow only those, or set
-`cors: []` to leave CORS to your app:
+Any origin is allowed by default, which on a laptop includes any website you
+visit. List origins to allow only those (a leading `*.` matches any subdomain),
+or set `cors: []` to leave CORS to your app:
 
 ```yaml
 proxy:
   cors:
-    - https://4400-other.cluster.cloudworkstations.dev
+    - https://*.cloudworkstations.dev
 ```
 
 ### Host and origin checks

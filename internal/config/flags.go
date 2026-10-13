@@ -42,7 +42,7 @@ func (c *Config) ApplyRoutes(routes []string) error {
 			continue
 		}
 
-		name := strings.Trim(strings.ReplaceAll(path, "/", "-"), "-")
+		name := strings.Trim(strings.ReplaceAll(strings.ToLower(path), "/", "-"), "-")
 		if name == "" {
 			name = "root"
 		}

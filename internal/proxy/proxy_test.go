@@ -10,6 +10,7 @@ import (
 
 	"github.com/kloudkit/portico/internal/config"
 	"github.com/kloudkit/portico/internal/routes"
+	"github.com/kloudkit/portico/internal/supervisor"
 )
 
 func upstream(t *testing.T) int {
@@ -42,12 +43,6 @@ func get(t *testing.T, h http.Handler, path string) (int, map[string]any) {
 	return rec.Code, body
 }
 
-func ready(p *Proxy) {
-	for _, t := range p.targets {
-		t.ready.Store(true)
-	}
-}
-
 func TestRouting(t *testing.T) {
 	api, web := upstream(t), upstream(t)
 
@@ -56,7 +51,6 @@ func TestRouting(t *testing.T) {
 		{Path: "/api", Service: "api", Kind: config.KindAttached, Port: api, Strip: true},
 		{Path: "/keep", Service: "keep", Kind: config.KindAttached, Port: api, Strip: false},
 	}, nil, nil)
-	ready(p)
 
 	tests := []struct {
 		path, want, prefix string
@@ -82,19 +76,45 @@ func TestRouting(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	p := New([]routes.Route{{Path: "/api", Service: "api", Port: 1}}, nil, nil)
+	code := 3
+	status := func(name string) (supervisor.Status, bool) {
+		return supervisor.Status{State: "exited", ExitCode: &code, Logs: []string{"boom"}}, name == "crash"
+	}
+	p := New([]routes.Route{
+		{Path: "/api", Name: "api", Service: "api", Port: 1},
+		{Path: "/crash", Name: "crash", Service: "crash", Port: 1},
+	}, nil, status)
 
 	if code, body := get(t, p, "/other"); code != http.StatusNotFound || body["error"] != "no_route" {
 		t.Errorf("no route: got %d %v", code, body)
 	}
 
 	if code, body := get(t, p, "/api/x"); code != http.StatusServiceUnavailable || body["state"] != "down" {
-		t.Errorf("down: got %d %v", code, body)
+		t.Errorf("attached down: got %d %v", code, body)
 	}
 
-	ready(p)
-	if code, body := get(t, p, "/api/x"); code != http.StatusBadGateway || body["error"] != "upstream_unavailable" {
-		t.Errorf("unreachable: got %d %v", code, body)
+	if code, body := get(t, p, "/crash/x"); code != http.StatusServiceUnavailable || body["state"] != "exited" || body["exit_code"] != 3.0 {
+		t.Errorf("crashed: got %d %v", code, body)
+	}
+}
+
+func TestPublicURL(t *testing.T) {
+	p := New([]routes.Route{{Path: "/", Service: "web", Port: upstream(t)}}, nil, nil)
+
+	var learned []string
+	p.Public = func(url string) { learned = append(learned, url) }
+
+	for _, host := range []string{"", "4400-ws.example.dev", "other.example"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if host != "" {
+			req.Header.Set("X-Forwarded-Host", host)
+			req.Header.Set("X-Forwarded-Proto", "https")
+		}
+		p.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	if len(learned) != 1 || learned[0] != "https://4400-ws.example.dev" || p.URL() != learned[0] {
+		t.Errorf("learned %v, URL %q", learned, p.URL())
 	}
 }
 
@@ -124,7 +144,6 @@ func TestCORS(t *testing.T) {
 
 	for _, cors := range [][]string{{"*"}, {origin}} {
 		p := New(rs, cors, nil)
-		ready(p)
 
 		pre := send(p, http.MethodOptions)
 		if pre.Code != http.StatusNoContent || pre.Header().Get("Access-Control-Allow-Headers") != "content-type" {
@@ -138,7 +157,6 @@ func TestCORS(t *testing.T) {
 	}
 
 	p := New(rs, []string{"https://only.example"}, nil)
-	ready(p)
 
 	if got := send(p, http.MethodGet).Header().Values("Access-Control-Allow-Origin"); len(got) != 1 || got[0] != "https://app.example" {
 		t.Errorf("disallowed origin should get the app's own headers, got %v", got)
@@ -148,7 +166,6 @@ func TestCORS(t *testing.T) {
 func TestPreserveHost(t *testing.T) {
 	port := upstream(t)
 	p := New([]routes.Route{{Path: "/", Service: "web", Port: port, PreserveHost: true}}, nil, nil)
-	ready(p)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "4400-ws.example.dev"

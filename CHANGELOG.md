@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.1] — Unreleased
+
+### Added
+
+- 📁 Start a `run` service in another directory with `dir`
+- 🔗 Show the public URL Portico is reached on, in its output and in `portico status`
+- ✳️ Allow CORS origins with a leading `*.` that matches any subdomain
+- 🧩 Ship a JSON schema for `portico.yaml`, for autocompletion in editors
+- 🔇 Skip writing log files with `log: false` or `--no-logs`
+
+### Changed
+
+- 🎨 Match the CLI colors to the logo and use the tagline in `--help`
+- 🔙 Retract v0.1.0 for `go install`
+
+### Fixed
+
+- 🔌 Stop every service when the terminal closes, instead of leaving them running
+- ⏱️ Route to a service as soon as it's up, not after the next readiness check
+- 🏷️ Reject service names that can't be used as file or container names, and the reserved `portico` and `nginx`
+- 🐳 Reject a compose `port` without `service`, or one the compose service doesn't publish
+- 📊 Keep progress bars and very long lines from growing memory
+- 🗂️ Rotate each log at 10 MB instead of letting it grow without limit
+- 🔖 Report the real version from `go install` builds
 ## [0.1.0] — 2026-10-13
 
 ### Added

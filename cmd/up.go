@@ -38,8 +38,9 @@ var upCmd = &cobra.Command{
 		ui.Raw, _ = f.GetBool("raw")
 		ui.Timestamps, _ = f.GetBool("timestamps")
 		hide, _ := f.GetStringSlice("hide")
+		noLogs, _ := f.GetBool("no-logs")
 
-		sup, err := supervisor.New(cfg, args, hide)
+		sup, err := supervisor.New(cfg, supervisor.Options{Only: args, Hide: hide, NoLogs: noLogs})
 		if err != nil {
 			return err
 		}
@@ -69,6 +70,7 @@ var upCmd = &cobra.Command{
 		}
 
 		p := proxy.New(rs, cfg.Proxy.CORS, sup.Status)
+		p.Public = func(url string) { ui.Log("reachable at %s", ui.Accent.Render(url)) }
 		srv := &http.Server{Handler: p, ReadHeaderTimeout: 10 * time.Second}
 
 		ui.Pad(sup.Names())
@@ -113,7 +115,7 @@ var upCmd = &cobra.Command{
 		go ctlSrv.Serve(ctl)
 		defer ctlSrv.Close()
 
-		g.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
+		g.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP))
 
 		err = g.Run()
 		if errors.As(err, &run.SignalError{}) || errors.Is(err, context.Canceled) {
@@ -128,7 +130,7 @@ func controlHandler(cfg *config.Config, rs []routes.Route, sup *supervisor.Super
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
-		var services []control.Service
+		status := control.Status{URL: p.URL()}
 		for _, name := range cfg.Names() {
 			svc := control.Service{Name: name, Kind: string(cfg.Services[name].Kind())}
 
@@ -140,25 +142,22 @@ func controlHandler(cfg *config.Config, rs []routes.Route, sup *supervisor.Super
 				}
 			}
 
-			state, detail := sup.Status(name)
+			st, owned := sup.Status(name)
 			switch {
-			case state == "" && ready:
-				state = "up"
-			case state == "":
-				state = "down"
-			case state == "starting" && (ready || svc.Routes == nil):
-				state = "running"
+			case !owned && ready:
+				st.State = "up"
+			case !owned:
+				st.State = "down"
+			case st.State == "starting" && (ready || svc.Routes == nil):
+				st.State = "running"
 			}
-			svc.State = state
-			if code, ok := detail["exit_code"].(int); ok {
-				svc.ExitCode = &code
-			}
+			svc.State, svc.ExitCode = st.State, st.ExitCode
 
-			services = append(services, svc)
+			status.Services = append(status.Services, svc)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(services)
+		json.NewEncoder(w).Encode(status)
 	})
 
 	mux.HandleFunc("POST /restart/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -236,4 +235,5 @@ func init() {
 	f.Bool("raw", false, "print service output without prefixes or colors")
 	f.Bool("timestamps", false, "prefix every line with the time")
 	f.StringSlice("hide", nil, "services whose output is not printed (still logged to .portico/logs)")
+	f.Bool("no-logs", false, "don't write service output to .portico/logs")
 }

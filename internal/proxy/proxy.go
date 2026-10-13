@@ -3,8 +3,8 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"maps"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -12,19 +12,26 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
+	"github.com/kloudkit/portico/internal/config"
 	"github.com/kloudkit/portico/internal/routes"
+	"github.com/kloudkit/portico/internal/supervisor"
 )
 
 type Proxy struct {
 	targets []*target
 	cors    []string
 	status  StatusFunc
+	public  atomic.Pointer[string]
+
+	// Public is called once, with the URL the first forwarded request came in on.
+	Public func(url string)
 }
 
-// StatusFunc reports the state of a service portico runs, or "" for one it doesn't.
-type StatusFunc func(name string) (string, map[string]any)
+// StatusFunc reports the state of a service portico runs, or false for one it doesn't.
+type StatusFunc func(name string) (supervisor.Status, bool)
 
 type target struct {
 	routes.Route
@@ -77,12 +84,26 @@ func New(rs []routes.Route, cors []string, status StatusFunc) *Proxy {
 				return nil
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-				writeJSON(w, http.StatusBadGateway, map[string]any{
-					"error":   "upstream_unavailable",
-					"service": t.Service,
-					"port":    t.Port,
-					"detail":  err.Error(),
-				})
+				if !errors.Is(err, syscall.ECONNREFUSED) {
+					writeJSON(w, http.StatusBadGateway, map[string]any{
+						"error":   "upstream_error",
+						"service": t.Service,
+						"port":    t.Port,
+						"detail":  err.Error(),
+					})
+					return
+				}
+
+				body := map[string]any{"error": "service_unavailable", "service": t.Service, "port": t.Port, "state": "down"}
+				if p.status != nil {
+					if st, ok := p.status(t.Name); ok {
+						body["state"] = st.State
+						if st.ExitCode != nil {
+							body["exit_code"], body["logs"] = *st.ExitCode, st.Logs
+						}
+					}
+				}
+				writeJSON(w, http.StatusServiceUnavailable, body)
 			},
 		}
 
@@ -95,6 +116,8 @@ func New(rs []routes.Route, cors []string, status StatusFunc) *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.learn(r)
+
 	if origin := r.Header.Get("Origin"); p.allowed(origin) {
 		h := w.Header()
 		h.Set("Access-Control-Allow-Origin", origin)
@@ -115,23 +138,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	t := p.match(r.URL.Path)
 	if t == nil {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "no_route", "path": r.URL.Path})
-		return
-	}
-
-	if !t.ready.Load() {
-		body := map[string]any{
-			"error":   "service_unavailable",
-			"service": t.Service,
-			"port":    t.Port,
-			"state":   "down",
-		}
-		if p.status != nil {
-			if state, detail := p.status(t.Name); state != "" {
-				body["state"] = state
-				maps.Copy(body, detail)
-			}
-		}
-		writeJSON(w, http.StatusServiceUnavailable, body)
 		return
 	}
 
@@ -170,8 +176,33 @@ func (p *Proxy) Ready(path string) bool {
 	return false
 }
 
+// URL is the public URL learned from the gateway in front, if any request came through one.
+func (p *Proxy) URL() string {
+	if u := p.public.Load(); u != nil {
+		return *u
+	}
+
+	return ""
+}
+
+func (p *Proxy) learn(r *http.Request) {
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" || p.public.Load() != nil {
+		return
+	}
+
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		proto = "http"
+	}
+	url := proto + "://" + host
+	if p.public.CompareAndSwap(nil, &url) && p.Public != nil {
+		p.Public(url)
+	}
+}
+
 func (p *Proxy) allowed(origin string) bool {
-	return origin != "" && (slices.Contains(p.cors, "*") || slices.Contains(p.cors, origin))
+	return slices.ContainsFunc(p.cors, func(pattern string) bool { return config.MatchOrigin(pattern, origin) })
 }
 
 func (p *Proxy) match(path string) *target {

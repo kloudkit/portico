@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	maxLine     = 64 * 1024
+	maxLog      = 10 * 1024 * 1024
 	tailLines   = 20
 	stopTimeout = 5 * time.Second
 	Label       = "portico.project"
@@ -39,6 +41,7 @@ type unit struct {
 	name    string
 	port    int
 	quiet   bool
+	logged  bool
 	style   lipgloss.Style
 	command func(ctx context.Context) *exec.Cmd
 	cleanup []string
@@ -46,19 +49,26 @@ type unit struct {
 	restart chan struct{}
 	pidFile string
 
-	mu     sync.Mutex
-	state  string
-	code   int
-	tail   []string
-	log    *os.File
-	cancel context.CancelFunc
+	mu       sync.Mutex
+	state    string
+	code     int
+	tail     []string
+	log      *os.File
+	logBytes int64
+	cancel   context.CancelFunc
 }
 
-// New prepares a unit for every service portico owns. only limits which ones start.
-func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
+type Options struct {
+	Only   []string
+	Hide   []string
+	NoLogs bool
+}
+
+// New prepares a unit for every service portico owns.
+func New(cfg *config.Config, opts Options) (*Supervisor, error) {
 	s := &Supervisor{dir: cfg.Dir, project: cfg.Project()}
 
-	for _, name := range only {
+	for _, name := range opts.Only {
 		svc, ok := cfg.Services[name]
 		if !ok {
 			return nil, fmt.Errorf("no service named %q", name)
@@ -71,7 +81,7 @@ func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
 	for i, name := range cfg.Names() {
 		svc := cfg.Services[name]
 		kind := svc.Kind()
-		if kind == config.KindAttached || (len(only) > 0 && !slices.Contains(only, name)) {
+		if kind == config.KindAttached || (len(opts.Only) > 0 && !slices.Contains(opts.Only, name)) {
 			continue
 		}
 
@@ -84,9 +94,10 @@ func New(cfg *config.Config, only, hide []string) (*Supervisor, error) {
 		}
 
 		u := &unit{
-			name:  name,
-			quiet: svc.Quiet || slices.Contains(hide, name),
-			style: ui.Color(i),
+			name:   name,
+			quiet:  svc.Quiet || slices.Contains(opts.Hide, name),
+			logged: svc.Logged() && !opts.NoLogs,
+			style:  ui.Color(i),
 		}
 
 		switch kind {
@@ -115,6 +126,7 @@ func (s *Supervisor) Add(name string, port int, args []string, cleanup []string)
 		port:    port,
 		style:   ui.Color(len(s.units)),
 		cleanup: cleanup,
+		logged:  true,
 		command: func(ctx context.Context) *exec.Cmd {
 			return exec.CommandContext(ctx, args[0], args[1:]...)
 		},
@@ -171,8 +183,15 @@ func (s *Supervisor) Names() []string {
 	return names
 }
 
-// Status reports an owned service's state, and its exit code and last lines once it exited.
-func (s *Supervisor) Status(name string) (string, map[string]any) {
+// Status is the state of a service portico runs; exit code and last lines are set once it exited.
+type Status struct {
+	State    string   `json:"state"`
+	ExitCode *int     `json:"exit_code,omitempty"`
+	Logs     []string `json:"logs,omitempty"`
+}
+
+// Status reports a service's state, or false for one portico doesn't run.
+func (s *Supervisor) Status(name string) (Status, bool) {
 	for _, u := range s.units {
 		if u.name != name {
 			continue
@@ -181,13 +200,15 @@ func (s *Supervisor) Status(name string) (string, map[string]any) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
 
-		if u.state != "exited" {
-			return u.state, nil
+		st := Status{State: u.state}
+		if u.state == "exited" {
+			code := u.code
+			st.ExitCode, st.Logs = &code, slices.Clone(u.tail)
 		}
-		return u.state, map[string]any{"exit_code": u.code, "logs": slices.Clone(u.tail)}
+		return st, true
 	}
 
-	return "", nil
+	return Status{}, false
 }
 
 // Run starts every unit and blocks until ctx ends, then stops them all.
@@ -212,16 +233,26 @@ func (s *Supervisor) Run(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 	for _, u := range s.units {
-		f, err := os.Create(filepath.Join(logs, u.name+".log"))
-		if err != nil {
-			return err
+		path := filepath.Join(logs, u.name+".log")
+		os.Remove(path + ".1")
+		if u.logged {
+			f, err := os.Create(path)
+			if err != nil {
+				return err
+			}
+			u.log = f
+		} else {
+			os.Remove(path)
 		}
-		u.log = f
 		u.pidFile = filepath.Join(pids, u.name)
 		u.restart = make(chan struct{}, 1)
 
 		wg.Go(func() {
-			defer f.Close()
+			defer func() {
+				if u.log != nil {
+					u.log.Close()
+				}
+			}()
 			for {
 				run, cancel := context.WithCancel(ctx)
 				u.mu.Lock()
@@ -313,12 +344,32 @@ func (u *unit) line(text string) {
 	if len(u.tail) > tailLines {
 		u.tail = u.tail[len(u.tail)-tailLines:]
 	}
-	fmt.Fprintln(u.log, plain)
+	if u.log != nil {
+		n, _ := fmt.Fprintln(u.log, plain)
+		u.logBytes += int64(n)
+		if u.logBytes > maxLog {
+			u.rotate()
+		}
+	}
 	u.mu.Unlock()
 
 	if !u.quiet {
 		ui.Line(u.name, u.style, text)
 	}
+}
+
+// rotate moves the log aside as <name>.log.1, keeping one, and starts a new one.
+func (u *unit) rotate() {
+	path := u.log.Name()
+	u.log.Close()
+	os.Rename(path, path+".1")
+
+	f, err := os.Create(path)
+	if err != nil {
+		u.log = nil
+		return
+	}
+	u.log, u.logBytes = f, 0
 }
 
 func (s *Supervisor) shell(svc config.Service) func(context.Context) *exec.Cmd {
@@ -332,7 +383,7 @@ func (s *Supervisor) shell(svc config.Service) func(context.Context) *exec.Cmd {
 
 	return func(ctx context.Context) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
-		cmd.Dir = s.dir
+		cmd.Dir = filepath.Join(s.dir, svc.Dir)
 		cmd.Env = append(os.Environ(), env...)
 		if !ui.Raw && term.IsTerminal(os.Stdout.Fd()) {
 			cmd.Env = append(cmd.Env, "FORCE_COLOR=1")
@@ -391,7 +442,8 @@ func listening(port int) bool {
 	return true
 }
 
-// lineWriter splits a stream into lines.
+// lineWriter splits a stream into lines. A carriage return overwrites the line
+// so far, the way a terminal shows a progress bar, and overlong lines are cut.
 type lineWriter struct {
 	emit func(string)
 	buf  []byte
@@ -402,9 +454,21 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 	for {
 		i := bytes.IndexByte(w.buf, '\n')
 		if i < 0 {
+			if j := bytes.LastIndexByte(w.buf, '\r'); j >= 0 && j < len(w.buf)-1 {
+				w.buf = w.buf[j+1:]
+			}
+			if len(w.buf) > maxLine {
+				w.emit(string(w.buf))
+				w.buf = nil
+			}
 			return len(p), nil
 		}
-		w.emit(strings.TrimRight(string(w.buf[:i]), "\r"))
+
+		line := bytes.TrimRight(w.buf[:i], "\r")
+		if j := bytes.LastIndexByte(line, '\r'); j >= 0 {
+			line = line[j+1:]
+		}
+		w.emit(string(line))
 		w.buf = w.buf[i+1:]
 	}
 }

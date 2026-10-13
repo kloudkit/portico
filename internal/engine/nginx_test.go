@@ -25,7 +25,7 @@ func TestNginxConfigIsValid(t *testing.T) {
 
 	cases := map[string]Nginx{
 		"any origin": {CORS: []string{"*"}, Routes: sample},
-		"allowlist":  {CORS: []string{"https://a.example", "https://b.example"}, Routes: sample},
+		"allowlist":  {CORS: []string{"https://a.example", "https://*.b.example"}, Routes: sample},
 		"no root":    {Routes: sample[1:]},
 	}
 

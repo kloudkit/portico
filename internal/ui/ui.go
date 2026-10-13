@@ -9,18 +9,19 @@ import (
 )
 
 var (
-	Accent = lipgloss.NewStyle().Foreground(Blue).Bold(true)
+	Accent = lipgloss.NewStyle().Foreground(Teal).Bold(true)
 	Faint  = lipgloss.NewStyle().Foreground(Overlay0)
 	Good   = lipgloss.NewStyle().Foreground(Green)
 	Warn   = lipgloss.NewStyle().Foreground(Yellow)
 	Bad    = lipgloss.NewStyle().Foreground(Red)
 )
 
-func Routes(rs []routes.Route) string {
-	t := table.New().
+// Table is the style every table shares.
+func Table(headers ...string) *table.Table {
+	return table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(Faint).
-		Headers("ROUTE", "SERVICE", "KIND", "PORT", "STRIP").
+		Headers(headers...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			s := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
@@ -28,7 +29,10 @@ func Routes(rs []routes.Route) string {
 			}
 			return s
 		})
+}
 
+func Routes(rs []routes.Route) string {
+	t := Table("ROUTE", "SERVICE", "KIND", "PORT", "STRIP")
 	for _, r := range rs {
 		strip := ""
 		if r.Strip && r.Path != "/" {

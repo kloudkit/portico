@@ -1,8 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -87,4 +90,82 @@ func TestPortNone(t *testing.T) {
 	if err := cfg.Validate(); err == nil {
 		t.Error("port: none should be rejected for an attached service")
 	}
+}
+
+func TestValidateNames(t *testing.T) {
+	for name, ok := range map[string]bool{"api": true, "web-1.v2_x": true, "Api": false, "a/b": false, "-x": false, "nginx": false, "portico": false} {
+		cfg := Default()
+		cfg.Services[name] = Service{Port: 3200}
+		if err := cfg.Validate(); (err == nil) != ok {
+			t.Errorf("%q: valid=%v, err=%v", name, ok, err)
+		}
+	}
+}
+
+func TestMatchOrigin(t *testing.T) {
+	cases := []struct {
+		pattern, origin string
+		want            bool
+	}{
+		{"*", "https://a.example", true},
+		{"*", "", false},
+		{"https://a.example", "https://a.example", true},
+		{"https://a.example", "https://b.example", false},
+		{"https://*.cloudworkstations.dev", "https://4400-ws.cluster.cloudworkstations.dev", true},
+		{"https://*.cloudworkstations.dev", "http://4400-ws.cloudworkstations.dev", false},
+		{"https://*.cloudworkstations.dev", "https://cloudworkstations.dev", false},
+		{"https://*.cloudworkstations.dev", "https://evil.dev/.cloudworkstations.dev", false},
+		{"https://*.cloudworkstations.dev", "https://cloudworkstations.dev.evil.dev", false},
+	}
+
+	for _, c := range cases {
+		if got := MatchOrigin(c.pattern, c.origin); got != c.want {
+			t.Errorf("MatchOrigin(%q, %q) = %v", c.pattern, c.origin, got)
+		}
+	}
+}
+
+func TestValidOrigin(t *testing.T) {
+	for origin, ok := range map[string]bool{"*": true, "https://a.dev": true, "https://*.a.dev": true, "http://localhost:3000": true, "a.dev": false, "https://a.*.dev": false, "https://a.dev/x": false, "ftp://a.dev": false} {
+		if validOrigin(origin) != ok {
+			t.Errorf("%q: want %v", origin, ok)
+		}
+	}
+}
+
+func TestSchemaCoversConfig(t *testing.T) {
+	data, err := os.ReadFile("../../portico.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var schema struct {
+		Properties struct {
+			Proxy struct {
+				Properties map[string]any `json:"properties"`
+			} `json:"proxy"`
+			Services struct {
+				AdditionalProperties struct {
+					Properties map[string]any `json:"properties"`
+				} `json:"additionalProperties"`
+			} `json:"services"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(typ reflect.Type, documented map[string]any) {
+		for field := range typ.Fields() {
+			tag, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+			if tag != "-" && tag != "" {
+				if _, ok := documented[tag]; !ok {
+					t.Errorf("%s.%s is missing from portico.schema.json", typ.Name(), tag)
+				}
+			}
+		}
+	}
+
+	check(reflect.TypeFor[Proxy](), schema.Properties.Proxy.Properties)
+	check(reflect.TypeFor[Service](), schema.Properties.Services.AdditionalProperties.Properties)
 }

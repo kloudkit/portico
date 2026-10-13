@@ -16,6 +16,11 @@ import (
 
 var ErrNotRunning = errors.New("portico is not running here")
 
+type Status struct {
+	URL      string    `json:"url,omitempty"`
+	Services []Service `json:"services"`
+}
+
 type Service struct {
 	Name     string  `json:"name"`
 	Kind     string  `json:"kind"`
@@ -30,10 +35,15 @@ type Route struct {
 	Ready bool   `json:"ready"`
 }
 
-// Socket is the control socket for a project. It lives in the temp dir because
-// unix socket paths are limited to about 100 characters.
+// Socket is the control socket for a project. It lives in the user's runtime
+// dir, or the temp dir, because unix socket paths are limited to about 100 characters.
 func Socket(project string) string {
-	return filepath.Join(os.TempDir(), "portico-"+project+".sock")
+	dir := os.Getenv("XDG_RUNTIME_DIR")
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	return filepath.Join(dir, "portico-"+project+".sock")
 }
 
 // Listen claims the socket, refusing if another portico already serves it.
@@ -73,11 +83,11 @@ func (c *Client) Running() bool {
 	return true
 }
 
-func (c *Client) Status() ([]Service, error) {
-	var services []Service
-	err := c.do(http.MethodGet, "/status", &services)
+func (c *Client) Status() (Status, error) {
+	var status Status
+	err := c.do(http.MethodGet, "/status", &status)
 
-	return services, err
+	return status, err
 }
 
 func (c *Client) Restart(name string) error {
