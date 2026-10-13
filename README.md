@@ -7,11 +7,14 @@ origin (Cloud Workstations, Codespaces, a remote dev box): the browser sees
 cross-origin calls, CORS and auth redirects get in the way, and `localhost` points
 at the wrong machine.
 
-Portico puts one port in front of all of them. The browser only ever talks to
-Portico, and Portico routes each path to the right service.
+Portico starts those services for you and puts one port in front of all of
+them. The browser only ever talks to Portico, and Portico routes each path to
+the right service.
 
 ## Features
 
+- **Runs your services:** shell commands, container images and compose files,
+  with their output in one stream and a clean stop on `Ctrl-C`.
 - **One origin:** `/` goes to the frontend, `/api` to the API, `/ws` to the
   websocket server. No CORS, no per-port auth.
 - **Websockets and streaming:** upgrades, server-sent events and chunked
@@ -22,14 +25,14 @@ Portico, and Portico routes each path to the right service.
 - **Compose aware:** point at a `compose.yaml` and its published ports become
   routes.
 - **JSON errors:** a service that is down answers `503` with JSON, not an HTML
-  page.
+  page. One that crashed includes its exit code and last lines of output.
 - **No config needed:** flags cover the simple cases; `portico.yaml` covers the
   rest.
 
 ## Requirements
 
 - Linux.
-- Docker or Podman, only for compose services.
+- Docker or Podman, only for `image` and `compose` services.
 
 ## Installation
 
@@ -46,10 +49,12 @@ Use `portico-arm64` on arm64. With Go 1.27 or newer you can also
 
 ## Quick start
 
-Start your services as usual, then put Portico in front of them:
+Let Portico start the frontend and route to an API you already run:
 
 ```sh
-portico up --route /=5173 --route /api=3200
+portico up \
+  --run 'web=npm run dev -- --port {port}' --route /=web \
+  --route /api=3200
 ```
 
 Open `http://localhost:4400` (or the forwarded URL for port `4400`). Calls to
@@ -66,11 +71,16 @@ proxy:
 
 services:
   web:
-    port: 5173
+    run: npm run dev -- --port {port}
     route: /
   api:
     port: 3200
     route: /api
+  config-server:
+    image: registry.example.com/config-server
+    tag: "2.4"
+    port: 8080
+    route: /config
   stack:
     compose: ./compose.yaml
     route: /stack
@@ -94,8 +104,22 @@ portico routes
 
 ### Services
 
+A service is one of:
+
+- **`run`:** a shell command Portico starts. `{port}` is replaced with the
+  service's port, which is also set as `PORT`. Leave `port` out and Portico
+  picks a free one.
+- **`image`:** a container image Portico runs with Docker or Podman. `port` is
+  the container port; Portico publishes it on a free host port.
+- **`compose`:** a compose file Portico brings up, and stops on exit.
+- **only `port`:** something you start yourself, such as an API under a
+  debugger. Portico routes to it and reports when it's up or down.
+
 | Key       | Description                                                          |
 | --------- | -------------------------------------------------------------------- |
+| `run`     | Shell command to start.                                              |
+| `image`   | Container image to run.                                              |
+| `tag`     | Image tag *(default: `latest`)*.                                     |
 | `port`    | Port the service listens on.                                         |
 | `route`   | Path to mount it at *(default: `/<name>`)*.                          |
 | `strip`   | Remove the route prefix before forwarding *(default: `true`)*.       |
@@ -103,9 +127,22 @@ portico routes
 | `compose` | Compose file; every service with published ports gets a route.      |
 | `service` | With `compose`, route a single compose service at `route`.          |
 | `routes`  | With `compose`, override the path of individual compose services.   |
+| `quiet`   | Keep its output off the screen.                                      |
 
 A compose service with several published ports is mounted at
 `<route>/<port>` for each one. With `service`, set `port` to pick one.
+
+### Output
+
+Every service's output is prefixed with its name, and also written to
+`.portico/logs/<name>.log` next to the config. A service that exits is left
+down, so its error stays on screen; restart Portico to bring it back.
+
+- **`--hide api,web`:** keep these off the screen.
+- **`--timestamps`:** add the time to every line.
+- **`--raw`:** no prefixes or colors, for piping.
+
+Pass service names to start only those: `portico up web api`.
 
 ### CORS
 
@@ -139,12 +176,12 @@ Flags override the file, and work without one:
 portico up --port 8000 --route /=5173 --route /api=3200
 ```
 
+- **`--run name=command`:** start a command as a service.
 - **`--route /path=port`:** route a path to a port.
 - **`--route /path=name`:** route a path to a service from the file.
 - **`--port`, `--host`, `--base`:** override the proxy settings.
 
 ## Status
 
-Portico is early. Routing, compose discovery and the builtin proxy work today.
-Starting services for you (`run`, `image`, `compose`), the nginx engine, and the
-`status`, `logs`, `restart` and `down` commands are next.
+Portico is early. Next up are the nginx engine and the `status`, `logs`,
+`restart` and `down` commands.

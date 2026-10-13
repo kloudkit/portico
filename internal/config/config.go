@@ -48,6 +48,9 @@ type Service struct {
 	Strip   *bool             `yaml:"strip"`
 	Host    string            `yaml:"host"`
 	Quiet   bool              `yaml:"quiet"`
+
+	// HostPort is where an image service's port is published.
+	HostPort int `yaml:"-"`
 }
 
 type Kind string
@@ -204,11 +207,13 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// AssignFreePorts gives every run service without a port a free one, for {port}.
+// AssignFreePorts gives run services without a port one for {port}, and
+// image services a host port to publish on.
 func (c *Config) AssignFreePorts() error {
 	for _, name := range c.Names() {
 		s := c.Services[name]
-		if s.Kind() != KindRun || s.Port != 0 {
+		kind := s.Kind()
+		if (kind != KindRun || s.Port != 0) && kind != KindImage {
 			continue
 		}
 
@@ -217,7 +222,11 @@ func (c *Config) AssignFreePorts() error {
 			return fmt.Errorf("services.%s: %w", name, err)
 		}
 
-		s.Port = port
+		if kind == KindImage {
+			s.HostPort = port
+		} else {
+			s.Port = port
+		}
 		c.Services[name] = s
 	}
 

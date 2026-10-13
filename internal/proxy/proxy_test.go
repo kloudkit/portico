@@ -55,7 +55,7 @@ func TestRouting(t *testing.T) {
 		{Path: "/", Service: "web", Kind: config.KindAttached, Port: web, Strip: true},
 		{Path: "/api", Service: "api", Kind: config.KindAttached, Port: api, Strip: true},
 		{Path: "/keep", Service: "keep", Kind: config.KindAttached, Port: api, Strip: false},
-	}, nil)
+	}, nil, nil)
 	ready(p)
 
 	tests := []struct {
@@ -82,7 +82,7 @@ func TestRouting(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	p := New([]routes.Route{{Path: "/api", Service: "api", Port: 1}}, nil)
+	p := New([]routes.Route{{Path: "/api", Service: "api", Port: 1}}, nil, nil)
 
 	if code, body := get(t, p, "/other"); code != http.StatusNotFound || body["error"] != "no_route" {
 		t.Errorf("no route: got %d %v", code, body)
@@ -123,7 +123,7 @@ func TestCORS(t *testing.T) {
 	}
 
 	for _, cors := range [][]string{{"*"}, {origin}} {
-		p := New(rs, cors)
+		p := New(rs, cors, nil)
 		ready(p)
 
 		pre := send(p, http.MethodOptions)
@@ -137,7 +137,7 @@ func TestCORS(t *testing.T) {
 		}
 	}
 
-	p := New(rs, []string{"https://only.example"})
+	p := New(rs, []string{"https://only.example"}, nil)
 	ready(p)
 
 	if got := send(p, http.MethodGet).Header().Values("Access-Control-Allow-Origin"); len(got) != 1 || got[0] != "https://app.example" {
@@ -147,7 +147,7 @@ func TestCORS(t *testing.T) {
 
 func TestPreserveHost(t *testing.T) {
 	port := upstream(t)
-	p := New([]routes.Route{{Path: "/", Service: "web", Port: port, PreserveHost: true}}, nil)
+	p := New([]routes.Route{{Path: "/", Service: "web", Port: port, PreserveHost: true}}, nil, nil)
 	ready(p)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

@@ -54,7 +54,6 @@ func init() {
 func addServiceFlags(cmd *cobra.Command) {
 	f := cmd.Flags()
 	f.StringArray("run", nil, "run a service: name=command ({port} is substituted)")
-	_ = f.MarkHidden("run")
 	f.StringArray("route", nil, "route a path: /path=port or /path=service")
 	f.Int("port", 0, "proxy port")
 	f.String("host", "", "proxy host")

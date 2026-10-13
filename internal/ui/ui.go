@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strconv"
 
 	"charm.land/lipgloss/v2"
@@ -16,10 +15,6 @@ var (
 	Warn   = lipgloss.NewStyle().Foreground(Yellow)
 	Bad    = lipgloss.NewStyle().Foreground(Red)
 )
-
-func Log(format string, args ...any) {
-	lipgloss.Println(Accent.Render("portico") + Faint.Render(" │ ") + fmt.Sprintf(format, args...))
-}
 
 func Routes(rs []routes.Route) string {
 	t := table.New().

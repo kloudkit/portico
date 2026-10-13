@@ -13,6 +13,7 @@ import (
 )
 
 type Route struct {
+	Name    string
 	Path    string
 	Service string
 	Kind    config.Kind
@@ -36,6 +37,7 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 
 		add := func(p, service string, port int) {
 			routes = append(routes, Route{
+				Name:    name,
 				Path:    path.Join("/", cfg.Proxy.Base, p),
 				Service: service,
 				Kind:    s.Kind(),
@@ -46,7 +48,11 @@ func Resolve(ctx context.Context, cfg *config.Config) ([]Route, error) {
 			})
 		}
 
-		if s.Kind() != config.KindCompose {
+		switch s.Kind() {
+		case config.KindImage:
+			add(route, name, s.HostPort)
+			continue
+		case config.KindRun, config.KindAttached:
 			add(route, name, s.Port)
 			continue
 		}

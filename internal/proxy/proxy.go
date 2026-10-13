@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -19,7 +20,11 @@ import (
 type Proxy struct {
 	targets []*target
 	cors    []string
+	status  StatusFunc
 }
+
+// StatusFunc reports the state of a service portico runs, or "" for one it doesn't.
+type StatusFunc func(name string) (string, map[string]any)
 
 type target struct {
 	routes.Route
@@ -28,8 +33,8 @@ type target struct {
 }
 
 // New builds the proxy. cors lists the origins it answers CORS for; "*" allows any.
-func New(rs []routes.Route, cors []string) *Proxy {
-	p := &Proxy{cors: cors}
+func New(rs []routes.Route, cors []string, status StatusFunc) *Proxy {
+	p := &Proxy{cors: cors, status: status}
 
 	for _, r := range rs {
 		t := &target{Route: r}
@@ -114,12 +119,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !t.ready.Load() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+		body := map[string]any{
 			"error":   "service_unavailable",
 			"service": t.Service,
 			"port":    t.Port,
 			"state":   "down",
-		})
+		}
+		if p.status != nil {
+			if state, detail := p.status(t.Name); state != "" {
+				body["state"] = state
+				maps.Copy(body, detail)
+			}
+		}
+		writeJSON(w, http.StatusServiceUnavailable, body)
 		return
 	}
 
