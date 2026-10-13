@@ -1,0 +1,9 @@
+/portico
+/dist
+
+.portico/
+
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
