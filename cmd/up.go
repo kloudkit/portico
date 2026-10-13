@@ -108,12 +108,10 @@ var upCmd = &cobra.Command{
 			cancel()
 		})
 
+		// The control socket outlives the group, so `portico down` only sees it go once everything stopped.
 		ctlSrv := &http.Server{Handler: controlHandler(cfg, rs, sup, p, cancel)}
-		g.Add(func() error {
-			return ctlSrv.Serve(ctl)
-		}, func(error) {
-			ctlSrv.Close()
-		})
+		go ctlSrv.Serve(ctl)
+		defer ctlSrv.Close()
 
 		g.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
 
@@ -220,11 +218,12 @@ func addNginx(cfg *config.Config, rs []routes.Route, sup *supervisor.Supervisor,
 	sup.Add("nginx", cfg.Proxy.Port, []string{
 		runtime, "run", "--rm",
 		"--name", name,
+		"--entrypoint", "nginx",
 		"--label", supervisor.Label + "=" + sup.Project(),
 		"--network", "host",
 		"-v", conf + ":/etc/portico/nginx.conf:ro",
 		cfg.Proxy.Image + ":" + cfg.Proxy.Tag,
-		"nginx", "-c", "/etc/portico/nginx.conf", "-g", "daemon off;",
+		"-c", "/etc/portico/nginx.conf", "-g", "daemon off;",
 	}, []string{runtime, "rm", "-f", name})
 
 	return nil
