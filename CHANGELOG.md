@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 📜 Skip rotated logs in `portico logs`, which failed on `<name>.log.1`
+- 🧾 Flag `dir`, `tag`, `service` and `routes` outside their kind of service in the schema, as `portico` already does
 
 ## [0.2.0] - 2026-10-13
 

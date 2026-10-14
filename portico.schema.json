@@ -57,8 +57,15 @@
           "quiet": { "description": "Keep the service's output off the screen.", "type": "boolean", "default": false },
           "log": { "description": "Write the service's output to .portico/logs/<name>.log.", "type": "boolean", "default": true }
         },
+        "dependencies": {
+          "dir": ["run"],
+          "tag": ["image"],
+          "service": ["compose"],
+          "routes": ["compose"]
+        },
         "not": {
           "anyOf": [
+            { "required": ["service", "routes"] },
             { "required": ["run", "image"] },
             { "required": ["run", "compose"] },
             { "required": ["image", "compose"] }
