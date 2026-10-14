@@ -26,10 +26,7 @@ var logsCmd = &cobra.Command{
 		dir := filepath.Join(cfg.Dir, ".portico", "logs")
 		names := args
 		if len(names) == 0 {
-			entries, _ := os.ReadDir(dir)
-			for _, e := range entries {
-				names = append(names, strings.TrimSuffix(e.Name(), ".log"))
-			}
+			names = logged(dir)
 		}
 		if len(names) == 0 {
 			return fmt.Errorf("no logs in %s yet", dir)
@@ -59,6 +56,19 @@ var logsCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// logged lists the services with a log in dir, skipping rotated copies like api.log.1.
+func logged(dir string) []string {
+	var names []string
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if name, ok := strings.CutSuffix(e.Name(), ".log"); ok && !e.IsDir() {
+			names = append(names, name)
+		}
+	}
+
+	return names
 }
 
 // tail prints the last n lines of a log, and with follow keeps printing new ones.
