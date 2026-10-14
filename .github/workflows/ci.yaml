@@ -1,22 +1,45 @@
 ---
-name: 💻 CLI Build
+name: 🧪 CI
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/**
+      - .goreleaser.yaml
+      - CHANGELOG.md
+      - cmd/**
+      - go.mod
+      - go.sum
+      - internal/**
+      - main.go
+      - portico.schema.json
   pull_request:
+    paths:
+      - .github/workflows/**
+      - .goreleaser.yaml
+      - CHANGELOG.md
+      - cmd/**
+      - go.mod
+      - go.sum
+      - internal/**
+      - main.go
+      - portico.schema.json
+  workflow_call:
 
 permissions:
   contents: read
 
+# Prefixed, because a called workflow shares its caller's name and the two would wait on each other.
 concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lint:
-    name: 🧹 Lint
+  test:
+    name: 🧪 Test
     runs-on: ubuntu-latest
-    if: github.actor != 'renovate[bot]'
 
     steps:
       - name: 📥 Checkout repository
@@ -25,33 +48,28 @@ jobs:
       - name: 🔵 Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.27.x
-
-      - uses: pre-commit/action@v3.0.1
-
-  build:
-    name: 💻 CLI Build
-    runs-on: ubuntu-latest
-    needs:
-      - lint
-
-    strategy:
-      matrix:
-        arch:
-          - amd64
-          - arm64
-
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v7
-
-      - name: 🔵 Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.x
+          go-version-file: go.mod
 
       - name: 🧪 Test
         run: go test -v ./...
 
-      - name: 👷‍♂️ Build for ${{ matrix.arch }}
-        run: GOOS=linux GOARCH=${{ matrix.arch }} go build -o portico-${{ matrix.arch }}
+  build:
+    name: 📦 Build (dry run)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 🔵 Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: 📦 Build the release artifacts without publishing
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean

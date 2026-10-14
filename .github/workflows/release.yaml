@@ -7,12 +7,25 @@ on:
       - v*
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  ci:
+    name: 🧪 CI
+    uses: ./.github/workflows/ci.yaml
+
   release:
     name: 🚀 Release
     runs-on: ubuntu-latest
+    needs:
+      - ci
+
+    permissions:
+      contents: write
 
     steps:
       - name: 📥 Checkout repository
@@ -23,7 +36,7 @@ jobs:
       - name: 🔵 Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.27.x
+          go-version-file: go.mod
 
       - name: 📝 Extract release notes from CHANGELOG.md
         run: |
