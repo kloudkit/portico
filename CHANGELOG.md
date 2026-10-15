@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- 🧟 Stop services already started when `portico up` fails to start another, instead of leaving them running
+
 ## [0.2.1] - 2026-10-14
 
 ### Fixed

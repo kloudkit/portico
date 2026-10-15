@@ -222,11 +222,16 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		s.removeLeftovers()
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	s.mu.Lock()
 	s.ctx = ctx
 	for _, u := range s.units {
 		if err := s.start(u); err != nil {
 			s.mu.Unlock()
+			cancel()
+			s.wg.Wait()
 			return err
 		}
 	}

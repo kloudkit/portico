@@ -93,6 +93,41 @@ func TestStopKillsTheProcessGroup(t *testing.T) {
 	})
 }
 
+func TestFailedStartStopsStartedUnits(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dir = t.TempDir()
+	cfg.Services = map[string]config.Service{"zz": {Run: "true", Port: 1}}
+	for i := range 20 {
+		cfg.Services["a"+strconv.Itoa(i)] = config.Service{Run: "sleep 60", Port: 1, Quiet: true}
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.Dir, ".portico", "logs", "zz.log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := New(cfg, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Run(context.Background()); err == nil {
+		t.Fatal("expected the zz log to fail")
+	}
+
+	for _, u := range s.units {
+		if u.done == nil {
+			continue
+		}
+		select {
+		case <-u.done:
+		default:
+			t.Errorf("%s still running after Run returned", u.name)
+		}
+	}
+	if pids, _ := os.ReadDir(filepath.Join(cfg.Dir, ".portico", "pids")); len(pids) > 0 {
+		t.Errorf("%d pid file(s) left behind", len(pids))
+	}
+}
+
 func TestRestart(t *testing.T) {
 	s, cancel, done := start(t, map[string]config.Service{
 		"crash": {Run: "echo started; sleep 60", Port: 1},
