@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🧟 Stop services already started when `portico up` fails to start another, instead of leaving them running
+- 🎯 Skip pid files whose process was replaced in `portico down`, which could stop an unrelated process after a crash and a reboot
 
 ## [0.2.1] - 2026-10-14
 

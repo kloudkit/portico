@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
@@ -26,7 +27,8 @@ func Cleanup(cfg *config.Config) []string {
 		data, _ := os.ReadFile(file)
 		os.Remove(file)
 
-		if pid, _ := strconv.Atoi(strings.TrimSpace(string(data))); pid > 0 && stopGroup(pid) {
+		field, recorded, _ := strings.Cut(strings.TrimSpace(string(data)), " ")
+		if pid, _ := strconv.Atoi(field); pid > 0 && ours(pid, recorded) && stopGroup(pid) {
 			stopped = append(stopped, e.Name())
 		}
 	}
@@ -72,6 +74,30 @@ func Cleanup(cfg *config.Config) []string {
 	}
 
 	return stopped
+}
+
+// ours tells whether pid is still the process its pid file recorded: started at
+// the same time, or gone and leaving only its process group. A pid since reused
+// by an unrelated process, such as after a reboot, is not.
+func ours(pid int, recorded string) bool {
+	now := startTime(pid)
+	return now == "" || now == recorded
+}
+
+// startTime is when pid started in clock ticks since boot, or "" if it's gone.
+func startTime(pid int) string {
+	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return ""
+	}
+
+	// The command name can hold spaces and parentheses, so count from the last ")".
+	fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
+	if len(fields) < 20 {
+		return ""
+	}
+
+	return fields[19]
 }
 
 func stopGroup(pid int) bool {

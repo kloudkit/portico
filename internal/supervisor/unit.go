@@ -69,7 +69,8 @@ func (u *unit) run(ctx context.Context) {
 
 	err := cmd.Start()
 	if err == nil {
-		os.WriteFile(u.pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o644)
+		pid := cmd.Process.Pid
+		os.WriteFile(u.pidFile, []byte(strconv.Itoa(pid)+" "+startTime(pid)), 0o644)
 		err = cmd.Wait()
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		os.Remove(u.pidFile)
